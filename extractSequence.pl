@@ -17,7 +17,8 @@ exit(main());
 
 sub main{
   die usage() if(@ARGV<1);
-  GetOptions($settings,('infile=s', 'start=s', 'nameOfOrganism=s', 'end=s', 'contig=s@', 'outfile=s'));
+  GetOptions($settings,('infile=s', 'start=s', 'nameOfOrganism=s', 'end=s', 'contig=s@', 'outfile=s', 'help'));
+  die usage() if($$settings{help});
 
   my $file=$$settings{infile} || die "Missing infile\n".usage();
   my $end||=$$settings{end};

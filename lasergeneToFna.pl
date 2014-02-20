@@ -6,6 +6,8 @@ use File::Path;
 use Bio::Perl;
 use File::Basename;
 
+die usage() if(!@ARGV);
+
 my $out=Bio::SeqIO->new(-format=>"fasta");
 my @file=@ARGV or die("need files to convert\n");
 foreach my $f (@file){
@@ -25,4 +27,11 @@ sub trim{
   my $str=shift;
   $str=~s/^\s+|\s+$//g;
   return $str;
+}
+
+sub usage{
+  local $0 = fileparse $0;
+  "Converts lasergene sequence files to a multifasta file
+  Usage: $0 *.lasergene > file.fasta
+  "
 }
