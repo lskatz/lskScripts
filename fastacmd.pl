@@ -17,7 +17,8 @@ exit(main());
 
 sub main{
   die usage() if(@ARGV<1);
-  GetOptions($settings,qw(search=s database=s insensitive!));
+  GetOptions($settings,qw(search=s database=s insensitive! help));
+  die usage() if($$settings{help});
   my $search=$$settings{search} || <>;
     chomp($search);
   my $db=$$settings{database} or die "Error: need database\n". usage();
