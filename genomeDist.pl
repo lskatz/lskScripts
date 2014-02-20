@@ -15,15 +15,24 @@ exit(main());
 
 sub main{
   my $settings={};
-  GetOptions($settings,qw(help averages quiet method=s coverage=i kmerlength=i)) or die $!;
+  GetOptions($settings,qw(help averages quiet method=s coverage=i kmerlength=i tempdir=s numcpus=i downsample=s)) or die $!;
   die usage() if(!@ARGV || $$settings{help});
   my @asm=@ARGV;
   $$settings{method}||="mummer";
   $$settings{method}=lc($$settings{method});
   $$settings{coverage}||=2; $$settings{coverage}=1 if($$settings{coverage}<1);
   $$settings{kmerlength}||=18;
+  $$settings{tempdir}||="tmp";
+  $$settings{numcpus}||=1;
+  $$settings{downsample}||=0;
 
+  if(!-d $$settings{tempdir}){
+    logmsg "WARNING: I could not find $$settings{tempdir}; creating it now.";
+    mkdir $$settings{tempdir};
+    die $! if $?;
+  }
 
+  # GENOME DISTANCE METHODS
   if($$settings{method} eq 'mummer'){
     my $pdist=mummer(\@asm,$settings);
     
@@ -53,13 +62,29 @@ sub main{
 sub jaccardDistance{
   my($genome,$settings)=@_;
   my %jDist;
+
+  downsample($genome,$settings) if($$settings{downsample});
+
   for(my $i=0;$i<@$genome-1;$i++){
-    my %k1=kmerCount($$genome[$i],$settings);
+    logmsg "Comparing $$genome[$i]";
+    my %k1=kmerCountJellyfish($$genome[$i],$settings);
     for(my $j=$i+1;$j<@$genome;$j++){
-      my %k2=kmerCount($$genome[$j],$settings);
+      my %k2=kmerCountJellyfish($$genome[$j],$settings);
       my $jDist=jDist(\%k1,\%k2,$settings);
       print join("\t",@$genome[$i,$j],$jDist)."\n";
     }
+  }
+}
+
+# downsample each genome reads file into a temp directory
+sub downsample{
+  my($genome,$settings)=@_;
+  logmsg "Downsampling the reads by $$settings{downsample}";
+  for my $g(@$genome){
+    my $newG="$$settings{tempdir}/".fileparse($g,qw(.fastq .fastq.gz)).".fastq";
+    system("run_assembly_removeDuplicateReads.pl --downsample $$settings{downsample} $g > $newG");
+    die "ERROR: problem with CGP run_assembly_removeDuplicateReads.pl" if $?;
+    $g=$newG;
   }
 }
 
@@ -67,12 +92,12 @@ sub jDist{
   my($k1,$k2,$settings)=@_;
   my $minKCoverage=$$settings{coverage};
 
-  logmsg "Finding intersection and union of kmers";
+  #logmsg "Finding intersection and union of kmers";
   my %kmerSet=kmerSets($k1,$k2,$settings);
 
   my $jDist=1-($kmerSet{intersection} / $kmerSet{union});
 
-  logmsg "$jDist=1-($kmerSet{intersection} / $kmerSet{union})";
+  #logmsg "$jDist=1-($kmerSet{intersection} / $kmerSet{union})";
   return $jDist;
 }
 
@@ -80,6 +105,7 @@ sub kmerSets{
   my($k1,$k2,$settings)=@_;
   
   my($intersectionCount,%union);
+  $intersectionCount=0;
 
   # Find uniq kmers in the first set of kmers.
   # Also find the union.
@@ -100,44 +126,37 @@ sub kmerSets{
   return (intersection=>$intersectionCount,union=>$unionCount);
 }
 
-sub kmerCount{
+sub kmerCountJellyfish{
   my($genome,$settings)=@_;
-  my $kmerLength=$$settings{kmerlength};
   my $minKCoverage=$$settings{coverage};
-  logmsg "Counting $kmerLength-mers for $genome";
   my($name,$path,$suffix)=fileparse($genome,qw(.fastq.gz .fastq));
-  if($suffix=~/\.fastq\.gz$/){
-    open(FILE,"gunzip -c '$genome' |") or die "I could not open $genome with gzip: $!";
-  } elsif($suffix=~/\.fastq$/){
-    open(FILE,"<",$genome) or die "I could not open $genome: $!";
-  } else {
-    die "I do not understand the extension on $genome";
-  }
-
-  # count kmers
+  
+  # use jellyfish to count kmers
+  my $outprefix="$$settings{tempdir}/mer_counts";
+  my $jfDb="$$settings{tempdir}/merged.jf";
+  my $kmerTsv="$$settings{tempdir}/jf.tsv";
+  system("jellyfish count -s 10000000 -m $$settings{kmerlength} -o $outprefix -t $$settings{numcpus} $genome");
+  die "Error: problem with jellyfish" if $?;
+  system("jellyfish merge ${outprefix}_* -o $jfDb");
+  die if $?;
+  system("rm ${outprefix}_*"); die if $?;
+  system("jellyfish dump -L $minKCoverage --column --tab -o $kmerTsv $jfDb");
+  die if $?;
+  
+  # load kmers to memory
   my %kmer;
-  my $i=0;
-  while(<FILE>){
-    my $mod=$i++ % 4;
-    if($mod==1){
-      chomp;
-      my $read=$_;
-      my $length=length($read)-$kmerLength+1;
-      for(my $j=0;$j<$length;$j++){
-        $kmer{substr($read,$j,$kmerLength)}++;
-      }
-    }
+  open(TSV,$kmerTsv) or die "ERROR: Could not open $kmerTsv: $!";
+  while(<TSV>){
+    chomp;
+    my @F=split /\t/;
+  
+    #next if($F[1] < $minKCoverage); # remove kmers with low depth
+    $kmer{$F[0]}=$F[1];
   }
-  close FILE;
-
-  # remove kmers with low depth
-  while(my($kmer,$count)=each(%kmer)){
-    delete($kmer{$kmer}) if($count<$minKCoverage);
-  }
-
-  logmsg "Found ".scalar(keys(%kmer))." unique kmers of depth > $minKCoverage";
+  close TSV;
   return %kmer;
 }
+
 
 sub mummer{
   my($asm,$settings)=@_;
@@ -149,7 +168,7 @@ sub mummer{
       my $prefix=join("_",$asm1,$asm2);
       if(!-e "$prefix.snps"){
         logmsg "Running on $prefix" unless($$settings{quiet});
-        system("nucmer --prefix $prefix $asm1 $asm2 2>/dev/null"); die if $?;
+        system("nucmer --prefix $prefix $asm1 $asm2 2>/dev/null"); die "Error running nucmer" if $?;
         system("show-snps -Clr $prefix.delta > $prefix.snps 2>/dev/null"); die if $?;
       }
       my $numSnps=countSnps("$prefix.snps",$settings);
@@ -183,5 +202,9 @@ sub usage{
     Jaccard: (kmer method) counts 18-mers and calculates 1 - (intersection/union)
   -c minimum kmer coverage. Default: 2
   -k kmer length. Default: 18
+  -t tempdir Default: tmp
+  -n numcpus Default: 1
+  --downsample 0 Downsample the reads to a frequency, using CG-Pipeline. Useful for removing extraneous data and saving on computation time. Values are between 0 and 1; 0 means no downsampling. 1 will remove duplicate reads only.
   "
 }
+
