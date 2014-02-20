@@ -137,7 +137,13 @@ sub kmerCountJellyfish{
   my $kmerTsv="$$settings{tempdir}/jf.tsv";
   system("jellyfish count -s 10000000 -m $$settings{kmerlength} -o $outprefix -t $$settings{numcpus} $genome");
   die "Error: problem with jellyfish" if $?;
-  system("jellyfish merge ${outprefix}_* -o $jfDb");
+  my @mer=glob("${outprefix}_*");
+  my $merStr=join(" ",@mer);
+  if(@mer >1){
+    system("jellyfish merge $merStr -o $jfDb");
+  } else {
+    system("cp -v $merStr $jfDb 1>&2");
+  }
   die if $?;
   system("rm ${outprefix}_*"); die if $?;
   system("jellyfish dump -L $minKCoverage --column --tab -o $kmerTsv $jfDb");
