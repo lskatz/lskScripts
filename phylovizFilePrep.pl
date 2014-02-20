@@ -10,12 +10,13 @@ use warnings;
 use Getopt::Long; 
 use Data::Dumper;
 
-my ($infile,$outfile);
+my ($infile,$outfile,$help);
 &GetOptions(
 	    'in:s'      => \$infile,#input alignment in fasta format
 	    'output:s'   => \$outfile,#output file for phyloviz 
+      'help' => \$help,
            );
-if(!($infile && $outfile)){
+if($help || !($infile && $outfile)){
   die "Usage: $0 -i infile.fasta -o out.phyloviz\n where the first sequence is a reference sequence";
 }
 
