@@ -6,7 +6,7 @@ use File::Path;
 use Bio::Perl;
 use File::Basename;
 
-die usage() if(!@ARGV);
+die usage() if(!@ARGV || $ARGV[0]=~/^\-+h/);
 
 my $out=Bio::SeqIO->new(-format=>"fasta");
 my @file=@ARGV or die("need files to convert\n");
