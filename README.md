@@ -22,8 +22,6 @@ Converts an alignment to another alignment format.
    at /home/lkatz/bin/convertAlignment.pl line 21.
 ====
 extractSequence.pl
-Unknown option: h
-Missing infile
 Usage: perl /home/lkatz/bin/extractSequence.pl -i inputGenomicFile -s start -e end
   -i input file: the file extension dictates the format
   -o outfile
@@ -33,7 +31,7 @@ Usage: perl /home/lkatz/bin/extractSequence.pl -i inputGenomicFile -s start -e e
     put a negative sign in front of a contig to indicate revcom
     you may have multiple -c args
   -n name of organism (useful for genome browsers)
-   at /home/lkatz/bin/extractSequence.pl line 22.
+   at /home/lkatz/bin/extractSequence.pl line 21.
 ====
 fastacmd.pl
 /home/lkatz/bin/fastacmd.pl: main::main: 
@@ -46,8 +44,7 @@ perl /home/lkatz/bin/fastacmd.pl -s search -d database
   -i case-insensitive
 ====
 fastqToFastaQual.pl
-Unknown option: h
-input parameter missing at /home/lkatz/bin/fastqToFastaQual.pl line 25.
+Usage: /home/lkatz/bin/fastqToFastaQual.pl -i inputFastqFile [-n numCpus -q outputQualfile -f outputFastaFile] at /home/lkatz/bin/fastqToFastaQual.pl line 25.
 ====
 genomeDist.pl
 Finds the p-distance between two assemblies using mummer. With more genomes, it creates a table.
@@ -62,17 +59,9 @@ Finds the p-distance between two assemblies using mummer. With more genomes, it 
    at /home/lkatz/bin/genomeDist.pl line 19.
 ====
 lasergeneToFna.pl
-
-------------- EXCEPTION: Bio::Root::Exception -------------
-MSG: Could not open -h: No such file or directory
-STACK: Error::throw
-STACK: Bio::Root::Root::throw /usr/share/perl5/Bio/Root/Root.pm:472
-STACK: Bio::Root::IO::_initialize_io /usr/share/perl5/Bio/Root/IO.pm:351
-STACK: Bio::SeqIO::_initialize /usr/share/perl5/Bio/SeqIO.pm:474
-STACK: Bio::SeqIO::new /usr/share/perl5/Bio/SeqIO.pm:358
-STACK: Bio::SeqIO::new /usr/share/perl5/Bio/SeqIO.pm:397
-STACK: /home/lkatz/bin/lasergeneToFna.pl:12
------------------------------------------------------------
+Converts lasergene sequence files to a multifasta file
+  Usage: lasergeneToFna.pl *.lasergene > file.fasta
+   at /home/lkatz/bin/lasergeneToFna.pl line 9.
 ====
 lyve_splitgbk.pl
 Splits a genbank file from gendb back out into individual loci
@@ -89,12 +78,11 @@ Splits a genbank file from gendb back out into individual loci
    at /home/lkatz/bin/lyve_splitgbk.pl line 23.
 ====
 phylovizFilePrep.pl
-Unknown option: h
 Usage: /home/lkatz/bin/phylovizFilePrep.pl -i infile.fasta -o out.phyloviz
- where the first sequence is a reference sequence at /home/lkatz/bin/phylovizFilePrep.pl line 19.
+ where the first sequence is a reference sequence at /home/lkatz/bin/phylovizFilePrep.pl line 20.
 ====
 sortFastq.pl
-Created tempdir /tmp/main.9795.mXgCQ
+Created tempdir /tmp/main.10144.Jgkhf
 Allows for better compression of reads by sorting them. Uses smalt under the hood. CGP fast assembly for an assembler.
   Usage: /home/lkatz/bin/sortFastq.pl [-r reference.fasta] < reads.fastq | gzip -c > sorted.fastq.gz
   -r reference.fasta If not supplied, then the reads will be assembled to create one.
