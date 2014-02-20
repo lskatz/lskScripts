@@ -18,9 +18,11 @@ my %numSequences; # static for a subroutine
 exit(main());
 
 sub main{
-  die("Usage: $0 -i inputFastqFile [-n numCpus -q outputQualfile -f outputFastaFile]") if(@ARGV<1);
+  my $usage="Usage: $0 -i inputFastqFile [-n numCpus -q outputQualfile -f outputFastaFile]";
+  die($usage) if(@ARGV<1);
 
-  GetOptions($settings,('numCpus=s','input=s','qualOut=s','fastaOut=s'));
+  GetOptions($settings,('numCpus=s','input=s','qualOut=s','fastaOut=s','help'));
+  die $usage if($$settings{help});
 
   my $file=$$settings{input}||die("input parameter missing");
   my $outfasta=$$settings{fastaOut}||"$file.fasta";
