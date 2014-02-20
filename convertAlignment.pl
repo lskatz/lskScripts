@@ -17,7 +17,7 @@ exit(main());
 sub main{
   my $settings={};
   die usage() if(@ARGV<1);
-  GetOptions($settings,qw(infile=s ginformat=s outfile=s format=s concatenateAlignment linker=s removeUninformativeSites));
+  GetOptions($settings,qw(infile=s ginformat=s outfile=s format=s concatenateAlignment linker=s removeUninformativeSites help));
   die usage() if($$settings{help});
 
   my $infile=$$settings{infile} or die "Error: Need infile param:\n".usage();
