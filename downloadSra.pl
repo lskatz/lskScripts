@@ -7,13 +7,14 @@ use warnings;
 use Getopt::Long;
 use Data::Dumper;
 use File::Temp qw/tempdir/;
+use File::Basename;
 
 sub logmsg{print STDERR "@_\n"; }
 exit main();
 
 sub main{
   my $settings={};
-  GetOptions($settings,qw(help pairedEnd tempdir=s)) or die $!;
+  GetOptions($settings,qw(help tempdir=s)) or die $!;
   die usage() if(!@ARGV);
   $$settings{tempdir}||=tempdir( CLEANUP => 1 );
   logmsg "Temporary directory is $$settings{tempdir}";
@@ -24,7 +25,7 @@ sub main{
   my $SRA=findSraId($query,$settings);
   for my $sra(@$SRA){
     my $fastq=downloadSra($sra,$settings);
-    $fastq=shuffleReads($fastq,$settings) if($$settings{pairedEnd});
+    $fastq=shuffleReads($fastq,$settings);
     printReads($fastq,$settings);
   }
   return 0;
@@ -38,7 +39,6 @@ sub checkForEdirect{
   return 1;
 }
 
-# (for i in `seq 68 77`; do CFSAN="CFSAN100$i"; esearch -db sra -query $CFSAN|efetch -format docsum|xtract -element Runs; done;) | perl -lane '/acc="(.+?)"/; $acc=$1; print "$acc";'
 sub findSraId{
   my($query,$settings)=@_;
   my $xml=`esearch -db sra -query '$query' | efetch -format docsum | xtract -element Runs`;
@@ -54,30 +54,37 @@ sub findSraId{
   return \@acc;    
 }
 
-#system("fastq-dump -I --split-files -v -v $acc"); die "Problem getting $CFSAN - $acc" if $?
 sub downloadSra{
   my($acc,$settings)=@_;
-  system("fastq-dump -I --split-files -O $$settings{tempdir} -v -v -v '$acc'");
+  logmsg "Downloading accession $acc from SRA";
+  system("fastq-dump -I --split-files -O $$settings{tempdir} -v -v -v '$acc' 1>&2");
   die if $?;
-  my @fastq=glob("$$settings{tempdir}/$acc*.fastq");
+  my @fastq=("$$settings{tempdir}/${acc}_1.fastq","$$settings{tempdir}/${acc}_2.fastq");#glob("$$settings{tempdir}/$acc*.fastq");
   logmsg "Created files ".join(" ",@fastq); # TODO: are these sorted properly?
   return \@fastq;
 }
 
 sub shuffleReads{
   my($fastq,$settings)=@_;
-  ...
+  my $acc=fileparse($$fastq[0],"_1.fastq");
+  my $out="$$settings{tempdir}/$acc.shuffled.fastq";
+  logmsg "Shuffling the reads into $out";
+  system("run_assembly_shuffleReads.pl ".join(" ",@$fastq)." > $out");
+  die if $?;
+  return $out;
 }
 
 sub printReads{
   my($fastq,$settings)=@_;
-  ...
+  logmsg "Outputting the fastq to stdout";
+  system("cat '$fastq'"); die if $?;
+  return 1;
 }
 
 sub usage{
-  "Download an SRA file, dump it to fastq, and shuffle the reads (if PE)
+  "Download an SRA file, dump it to fastq, and shuffle the reads.  Expects PE Fastq
   Warning: only one Illumina run is expected. Multiple runs have not been tested.
   Usage: $0 query text > out.fastq
-  -p to indicate that you expect paired-end
+  -t tempdir Default: one will be made for you
   "
 }
