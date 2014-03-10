@@ -13,15 +13,17 @@ sub logmsg{print STDERR "@_\n"; }
 exit main();
 
 sub main{
-  my $settings={};
-  GetOptions($settings,qw(help tempdir=s)) or die $!;
+  my $settings={
+    checkexecs=>1,
+  };
+  GetOptions($settings,qw(help tempdir=s checkexecs!)) or die $!;
   die usage() if(!@ARGV);
   $$settings{tempdir}||=tempdir( CLEANUP => 1 );
   logmsg "Temporary directory is $$settings{tempdir}";
 
   my $query=join(" ",@ARGV);
 
-  checkForEdirect();
+  checkForEdirect() if($$settings{checkexecs});
   my $SRA=findSraId($query,$settings);
   for my $sra(@$SRA){
     my $fastq=downloadSra($sra,$settings);
@@ -86,5 +88,6 @@ sub usage{
   Warning: only one Illumina run is expected. Multiple runs have not been tested.
   Usage: $0 query text > out.fastq
   -t tempdir Default: one will be made for you
+  -nocheck to not check for executables
   "
 }
