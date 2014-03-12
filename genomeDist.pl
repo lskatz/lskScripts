@@ -173,8 +173,9 @@ sub mummer{
       my $asm2=$$asm[$j];
       my $prefix=join("_",$asm1,$asm2);
       if(!-e "$prefix.snps"){
+        my $nucErr="$$settings{tempdir}/nucmer.err";
         logmsg "Running on $prefix" unless($$settings{quiet});
-        system("nucmer --prefix $prefix $asm1 $asm2 2>/dev/null"); die "Error running nucmer" if $?;
+        system("nucmer --prefix $prefix $asm1 $asm2 2>$nucErr"); die "Error running nucmer:\n".`cat $nucErr` if $?;
         system("show-snps -Clr $prefix.delta > $prefix.snps 2>/dev/null"); die if $?;
       }
       my $numSnps=countSnps("$prefix.snps",$settings);
