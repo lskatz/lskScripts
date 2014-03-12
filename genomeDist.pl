@@ -7,6 +7,7 @@ use warnings;
 use Data::Dumper;
 use Getopt::Long;
 use File::Basename;
+use File::Spec;
 
 my $start=time;
 
@@ -166,20 +167,34 @@ sub kmerCountJellyfish{
 
 sub mummer{
   my($asm,$settings)=@_;
-  my %pdist=();
+
+  # Make symbolic links to all the genomes in the temp directory so that random files aren't spewed everywhere.
+  my (@asm,@asmName);
   for(my $i=0;$i<@$asm;$i++){
-    my $asm1=$$asm[$i];
-    for(my $j=0;$j<@$asm;$j++){
-      my $asm2=$$asm[$j];
-      my $prefix=join("_",$asm1,$asm2);
+    my $asmName=fileparse($$asm[$i]);
+    my $target="$$settings{tempdir}/$asmName";
+    symlink File::Spec->rel2abs($$asm[$i]), $target or warn "Warning while trying to make a symbolic link ($target):$!";
+    push(@asm,$target);
+    push(@asmName,$asmName);
+  }
+
+  # calculate distances with mummer/nucmer
+  my %pdist=();
+  for(my $i=0;$i<@asm;$i++){
+    my $asm1=$asm[$i];
+    for(my $j=0;$j<@asm;$j++){
+      my $asm2=$asm[$j];
+      my $prefix="$$settings{tempdir}/".join("_",$asmName[$i],$asmName[$j]);
       if(!-e "$prefix.snps"){
         my $nucErr="$$settings{tempdir}/nucmer.err";
         logmsg "Running on $prefix" unless($$settings{quiet});
-        system("nucmer --prefix $prefix $asm1 $asm2 2>$nucErr"); die "Error running nucmer:\n".`cat $nucErr` if $?;
+        my $command="nucmer --prefix $prefix $asm1 $asm2 2>$nucErr";
+        system($command); die "Error running nucmer with command:\n  $command\n".`cat $nucErr` if $?;
         system("show-snps -Clr $prefix.delta > $prefix.snps 2>/dev/null"); die if $?;
       }
       my $numSnps=countSnps("$prefix.snps",$settings);
-      $pdist{$asm1}{$asm2}=$numSnps;
+      #$pdist{$asm1}{$asm2}=$numSnps;
+      $pdist{$asmName[$i]}{$asmName[$j]}=$numSnps;
       #$pdist{$asm2}{$asm1}=$numSnps;
     }
   }
