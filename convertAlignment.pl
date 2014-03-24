@@ -63,7 +63,7 @@ sub convertAlnToDir{
 sub convertAlnToFile{
   my($infile,$outfile,$settings)=@_;
   logmsg "Converting $infile ($$settings{infileFormat}) to file $outfile";
-  my $in=Bio::AlignIO->new(-file=>$infile,-format=>$$settings{infileFormat});
+  my $in=Bio::AlignIO->new(-file=>$infile,-format=>$$settings{infileFormat},-idlength=>30);
   my $out=Bio::AlignIO->new(-file=>">$outfile",-format=>$$settings{outfileformat},-idlength=>30);
   my $alnCounter=0;
   if($$settings{concatenateAlignment}){

@@ -43,8 +43,15 @@ sub checkForEdirect{
 
 sub findSraId{
   my($query,$settings)=@_;
-  my $xml=`esearch -db sra -query '$query' | efetch -format docsum | xtract -element Runs`;
-  die if $?;
+  my $numTries=0;
+  my $command="esearch -db sra -query '$query' | efetch -format docsum | xtract -element Runs";
+  my $xml=`$command`;
+  while($? && $numTries++ < 20){
+    logmsg "Command failed! $!\n Command was\n   $command";
+    $xml=`$command`;
+    sleep int(rand(4)) + 1; # sleep for a random time in case other scripts are colliding
+  }
+  die "ERROR: tried 20 times and failed! $!" if $?;
 
   my @acc;
   while($xml=~/acc="(.+?)"/g){
@@ -58,9 +65,17 @@ sub findSraId{
 
 sub downloadSra{
   my($acc,$settings)=@_;
+  my $numTries=0;
   logmsg "Downloading accession $acc from SRA";
-  system("fastq-dump -I --split-files -O $$settings{tempdir} -v -v -v '$acc' 1>&2");
-  die if $?;
+  my $command="fastq-dump -I --split-files -O $$settings{tempdir} -v -v -v '$acc' 1>&2";
+  system($command);
+  while($? && $numTries++ < 20){
+    logmsg "Command failed! $!\n Command was\n   $command";
+    system($command);
+    sleep int(rand(4)) + 1; # sleep for a random time in case other scripts are colliding
+  }
+  die "ERROR: tried fastq-dump 20 times and failed! $!" if $?;
+
   my @fastq=("$$settings{tempdir}/${acc}_1.fastq","$$settings{tempdir}/${acc}_2.fastq");#glob("$$settings{tempdir}/$acc*.fastq");
   logmsg "Created files ".join(" ",@fastq); # TODO: are these sorted properly?
   return \@fastq;
