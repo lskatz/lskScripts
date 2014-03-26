@@ -10,7 +10,9 @@ use Getopt::Long;
 use Data::Dumper;
 use List::Util qw/sum min max/;
 use Scalar::Util qw/looks_like_number/;
-#use Statistics::Descriptive;
+use FindBin;
+use lib "$FindBin::Bin";
+use Statistics::Descriptive;
 
 exit(main());
 
@@ -49,74 +51,25 @@ sub main{
     }
   }
 
-  my($mean,$std)=meanStdev(\@data,$settings);
+  my $stat=Statistics::Descriptive::Full->new();
+  $stat->add_data(\@data);
+
+  # overall metrics
   my $sum=sum(@data);
-
-  print "$mean +/- $std\n";
-  print "total: $sum\n";
-
-  my $q1=median(\@data,0.25);
-  my $q3=median(\@data,0.75);
-  print "median: ". median(\@data)." [$q1,$q3]\n";
-  print "Range: [".min(@data).'-'.max(@data)."]\n";
+  my $min=min(@data);
+  my $max=max(@data);
+  print "Total: $sum\n";
+  # normal dist stuff
+  printf("Average: %f +/- %f\n",$stat->mean(),$stat->standard_deviation());
+  # weighted distribution
+  #print $stat->quantile(1)."\n";
+  printf("Median: %0.2f [%0.2f,%0.2f] [%0.1f-%0.1f]\n",$stat->median(),$stat->quantile(1),$stat->quantile(3),$min,$max);
 
   if(@badData && $$settings{warnings}){
     warn "Warning: these data points were not used because they do not look like numbers: \n=>".join("\n=>",@badData)."\n";
   }
 
   return 0;
-}
-
-sub average{
-        my($data) = @_;
-        if (not @$data) {
-                die("Empty array\n");
-        }
-        my $total = 0;
-        foreach (@$data) {
-                $total += $_;
-        }
-        my $average = $total / @$data;
-        return $average;
-}
-sub stdev{
-        my($data) = @_;
-        if(@$data == 1){
-                return 0;
-        }
-        my $average = &average($data);
-        my $sqtotal = 0;
-        foreach(@$data) {
-                $sqtotal += ($average-$_) ** 2;
-        }
-        my $std = ($sqtotal / (@$data-1)) ** 0.5;
-        return $std;
-}
-
-
-sub meanStdev{
-  my($data,$settings)=@_;
-  my $avg=average($data);
-  my $stdev=stdev($data);
-  return($avg,$stdev);
-}
-
-# https://github.com/fhcrc/bdes/blob/master/Perl/Median.pl
-sub median(){
-    my($array,$quartile)=@_;
-    $quartile||=0.5;
-    my @array = sort {$a <=> $b } @$array;
-    my $size = scalar(@array);
-    my $i=$quartile * ($size+1);
-
-    # if a decimal, then average above and below
-    my $value;
-    if($i!=int($i)){
-      $value=(($array[$i]+$array[$i-1])/2)
-    } else {
-      $value=$array[$i];
-    }
-    return $value;
 }
 
 sub usage{
