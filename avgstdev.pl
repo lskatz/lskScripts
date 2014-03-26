@@ -11,7 +11,7 @@ use Data::Dumper;
 use List::Util qw/sum min max/;
 use Scalar::Util qw/looks_like_number/;
 use FindBin;
-use lib "$FindBin::Bin";
+use lib "$FindBin::Bin/lib";
 use Statistics::Descriptive;
 
 exit(main());
