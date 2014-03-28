@@ -11,7 +11,7 @@ use Getopt::Long;
 
 my $settings={};
 die usage() if(@ARGV<1);
-GetOptions($settings,qw(protein infile=s locusTags geneTags trust));
+GetOptions($settings,qw(protein infile=s locusTags geneTags trust product)) or die $!;
 my $translate=$$settings{protein} || 0;
 my $useLocusTags=$$settings{locusTags} || 0;
 my $useGeneTags=$$settings{geneTags} || 0;
@@ -53,6 +53,9 @@ while(my $contig=$seqin->next_seq){
     if($feat->has_tag('gene')){
       $gene=join("_",$feat->get_tag_values('gene'));
     }
+    if($feat->has_tag('product')){
+      $product=join("_",$feat->get_tag_values('product'));
+    }
 
     @newId=(join("_",($strain,$contigName,$start,$stop)));
     
@@ -61,6 +64,9 @@ while(my $contig=$seqin->next_seq){
     $newId=~s/^_+|_+$//g;
     $newId=$locus if($locus && $useLocusTags); # keep the locus name if it exists
     $newId=$gene if($gene && $useGeneTags);
+    $newId=$product if($product && $$settings{product});
+
+    $newId=~s/\s+/_/g;
     $seq->id("lcl|$newId");
 
     next if($seen{$seq->id}++); # don't write this seq if it's been seen.  Increment in the same step
@@ -102,7 +108,7 @@ sub usage{
   Usage: $thisFile -i infile
   -i infile
     genbank or embl
-  -p
+  --protein
     if you would like to extract protein
   -l
     to use locus tags instead of genome_contig_start_stop format
@@ -110,5 +116,7 @@ sub usage{
     to use gene tags instead of anything else (overrides -l option)
   -t
     to trust a given translation, if in the features (if using -p) 
+  --product
+    to trust the product name
   ";
 }
