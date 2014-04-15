@@ -110,7 +110,7 @@ sub printNewTree{
 sub ncbiInfo{
   my($oldid,$settings)=@_;
   my $newid;
-  if($oldid =~/^SAMN/){
+  if($oldid =~/^(SAMN|CFSAN)/){
     $newid=biosampleInfo($oldid,$settings);
   } elsif($oldid=~/^GC\w/){
     $newid=assemblyInfo($oldid,$settings);

@@ -130,7 +130,14 @@ sub kmerSets{
 sub kmerCountJellyfish{
   my($genome,$settings)=@_;
   my $minKCoverage=$$settings{coverage};
-  my($name,$path,$suffix)=fileparse($genome,qw(.fastq.gz .fastq));
+  my($name,$path,$suffix)=fileparse($genome,qw(.fastq.gz .fastq .gz));
+
+  if($suffix =~/\.gz$/){
+    my $newName="$$settings{tempdir}/$name.fastq";
+    logmsg "Uncompressing $genome to $newName";
+    system("gunzip -c $genome > $newName"); die if $?;
+    $genome=$newName;
+  }
   
   # use jellyfish to count kmers
   my $outprefix="$$settings{tempdir}/mer_counts";
