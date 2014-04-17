@@ -131,6 +131,7 @@ sub kmerCountJellyfish{
   my($genome,$settings)=@_;
   my $minKCoverage=$$settings{coverage};
   my($name,$path,$suffix)=fileparse($genome,qw(.fastq.gz .fastq .gz));
+  my $tmpName="$$settings{tempdir}/$name.fastq";
 
   if($suffix =~/\.gz$/){
     my $newName="$$settings{tempdir}/$name.fastq";
@@ -140,9 +141,10 @@ sub kmerCountJellyfish{
   }
   
   # use jellyfish to count kmers
-  my $outprefix="$$settings{tempdir}/mer_counts";
-  my $jfDb="$$settings{tempdir}/merged.jf";
-  my $kmerTsv="$$settings{tempdir}/jf.tsv";
+  my $rand=int(rand(999999999)); # avoid clashing
+  my $outprefix="$$settings{tempdir}/$rand.mer_counts";
+  my $jfDb="$$settings{tempdir}/merged.$rand.jf";
+  my $kmerTsv="$$settings{tempdir}/jf.$rand.tsv";
   system("jellyfish count -s 10000000 -m $$settings{kmerlength} -o $outprefix -t $$settings{numcpus} $genome");
   die "Error: problem with jellyfish" if $?;
   my @mer=glob("${outprefix}_*");
@@ -168,6 +170,8 @@ sub kmerCountJellyfish{
     $kmer{$F[0]}=$F[1];
   }
   close TSV;
+
+  unlink $tmpName if($tmpName && -e $tmpName);
   return %kmer;
 }
 
