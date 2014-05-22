@@ -16,7 +16,7 @@ sub main{
   my $settings={
     checkexecs=>1,
   };
-  GetOptions($settings,qw(help tempdir=s checkexecs!)) or die $!;
+  GetOptions($settings,qw(help tempdir=s checkexecs! only-paired-end)) or die $!;
   die usage() if(!@ARGV);
   $$settings{tempdir}||=tempdir( CLEANUP => 1 );
   logmsg "Temporary directory is $$settings{tempdir}";
@@ -25,10 +25,26 @@ sub main{
 
   checkForEdirect() if($$settings{checkexecs});
   my $SRA=findSraId($query,$settings);
+  ACCESSION: 
   for my $sra(@$SRA){
     my $fastq=downloadSra($sra,$settings);
+    
+    # If the user only wants paired end but this is single end,
+    # don't let anything be printed. Move on.
+    if($$settings{"only-paired-end"}){
+      for(@$fastq){
+        if(!-f $_){
+          logmsg "WARNING: user only wanted paired end; however, only single end was detected for accession $sra\n  I will not print reads from accession $sra.";
+          next ACCESSION;
+        }
+      }
+    }
+
     $fastq=shuffleReads($fastq,$settings);
     printReads($fastq,$settings);
+
+    # remove any traces
+    #unlink $_ for(glob("$$settings{tempdir}/*.fastq"));
   }
   return 0;
 }
@@ -84,6 +100,13 @@ sub downloadSra{
 sub shuffleReads{
   my($fastq,$settings)=@_;
   my $acc=fileparse($$fastq[0],"_1.fastq");
+
+  # see if the output is paired end or not.
+  # If not, then just return the single end.
+  if(!-f "$acc"."_2.fastq"){
+    return $$fastq[0];
+  }
+
   my $out="$$settings{tempdir}/$acc.shuffled.fastq";
   logmsg "Shuffling the reads into $out";
   system("run_assembly_shuffleReads.pl ".join(" ",@$fastq)." > $out");
@@ -104,5 +127,6 @@ sub usage{
   Usage: $0 query text > out.fastq
   -t tempdir Default: one will be made for you
   -nocheck to not check for executables
+  --only-paired-end to not accept single end runs.
   "
 }
