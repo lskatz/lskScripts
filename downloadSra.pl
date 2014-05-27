@@ -50,7 +50,7 @@ sub main{
 }
 
 sub checkForEdirect{
-  for my $exec(qw(esearch efetch xtract fastq-dump run_assembly_shuffleReads.pl cat)){
+  for my $exec(qw(esearch efetch xtract fastq-dump prefetch run_assembly_shuffleReads.pl cat)){
     system("which $exec >& /dev/null");
     die "ERROR: could not find $exec in your PATH" if $?;
   }
@@ -83,7 +83,11 @@ sub downloadSra{
   my($acc,$settings)=@_;
   my $numTries=0;
   logmsg "Downloading accession $acc from SRA";
-  my $command="fastq-dump -I --split-files -O $$settings{tempdir} -v -v -v '$acc' 1>&2";
+  system("prefetch '$acc' 1>&2");
+  # Do not check for errors on prefetch because fastq-dump will work with or without it
+
+  logmsg "Converting to fastq format";
+  my $command="fastq-dump -I --split-files -O $$settings{tempdir} -v -v -v -v -v '$acc' 1>&2";
   system($command);
   while($? && $numTries++ < 20){
     logmsg "Command failed! $!\n Command was\n   $command";
