@@ -1,0 +1,13 @@
+#!/bin/bash
+
+# Author: Lee Katz
+# Figures out some quick metrics from SGE
+
+# Take a snapshot of qstat.
+QSTAT=$(qstat -u '*');
+
+# How many of the cluster's slots I'm taking
+# echo "$QSTAT" |tail -n +3| perl -MData::Dumper -e 'while(<>){s/^\s+|\s+$//g; @F=split /\s+/; next if($F[4] ne 'r'); $slots=$F[8]; if($F[3] eq $ENV{USER}){$mine+=$slots;} $total+=$slots; } print "$mine out of $total\n";'
+
+# who is the current hog
+echo "$QSTAT" | perl -lane 'BEGIN{print "USER\tSLOTS";} next if(!$F[3] || !$F[8]);$slot{$F[3]}+=$F[8]; END{@user=sort{$slot{$b}<=>$slot{$a}} keys(%slot); print "$_\t$slot{$_}" for @user;}' | head|column -t
