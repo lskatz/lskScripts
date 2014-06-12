@@ -5,6 +5,10 @@
 
 # Take a snapshot of qstat.
 QSTAT=$(qstat -u '*');
+if [ $? -gt 0 ]; then
+  echo "ERROR with qstat" >&2
+  exit 1;
+fi
 
 # How many of the cluster's slots I'm taking
 # echo "$QSTAT" |tail -n +3| perl -MData::Dumper -e 'while(<>){s/^\s+|\s+$//g; @F=split /\s+/; next if($F[4] ne 'r'); $slots=$F[8]; if($F[3] eq $ENV{USER}){$mine+=$slots;} $total+=$slots; } print "$mine out of $total\n";'
