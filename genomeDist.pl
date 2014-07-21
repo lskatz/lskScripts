@@ -53,6 +53,9 @@ sub main{
   elsif($$settings{method} eq 'jaccard'){
     jaccardDistance(\@asm,$settings);
   }
+  elsif($$settings{method} eq 'jaccardkanalyze'){
+    jaccardKAnalyze(\@asm,$settings);
+  }
   else {
     die "I do not know how to perform method $$settings{method}";
   }
@@ -77,6 +80,21 @@ sub jaccardDistance{
   }
 }
 
+sub jaccardKAnalyze{
+  my($genome,$settings)=@_;
+  my %jDist;
+  downsample($genome,$settings) if($$settings{downsample});
+  for(my $i=0;$i<@$genome-1;$i++){
+    logmsg "Comparing $$genome[$i]";
+    my $kmerFile1=kmerCountKAnalyze($$genome[$i],$settings);
+    for(my $j=$i+1;$j<@$genome;$j++){
+      my $kmerFile2=kmerCountKAnalyze($$genome[$j],$settings);
+      my $jDist=jDistSortedFile($kmerFile1,$kmerFile2,$settings);
+      print join("\t",@$genome[$i,$j],$jDist)."\n";
+    }
+  }
+}
+
 # downsample each genome reads file into a temp directory
 sub downsample{
   my($genome,$settings)=@_;
@@ -87,6 +105,52 @@ sub downsample{
     die "ERROR: problem with CGP run_assembly_removeDuplicateReads.pl" if $?;
     $g=$newG;
   }
+}
+
+sub jDistSortedFile{
+  my($kmerFile1,$kmerFile2,$settings)=@_;
+  my($matchCount,$uniqueCount);
+  open(KC1,$kmerFile1) or die "ERROR: could not open $kmerFile1:$!";
+  open(KC2,$kmerFile2) or die "ERROR: could not open $kmerFile2:$!";
+  my $kmer2;
+  while (my $kc1=<KC1>){
+    my($kmer1,$kmercount1)=split(/\t/,$kc1);
+    next if($kmercount1 < $$settings{coverage});
+
+    # Get the second file's kmer if it is unset.
+    if(!$kmer2){
+      my $kmercount2;
+      do{
+        my $kc2=<KC2>; chomp($kc2);
+        ($kmer2,$kmercount2)=split(/\t/,$kc2);
+      } while($kmercount2 < $$settings{coverage});
+    }
+
+    if($kmer1 eq $kmer2){
+      $matchCount++;
+      undef($kmer2); # marks that a new one has to be obtained
+      next;
+    }
+    ############
+    ### MISMATCH
+    ############
+    $uniqueCount++;
+
+    # if there is no mismatch, figure out how to advance
+    my $cmp=$kmer1 cmp $kmer2;
+    # If the left comes before alphabetically, it has to catch up. 
+    # Advance to the next kmer1.
+    if($cmp==-1){
+
+    } 
+    # If the right comes before alphabetically, it has to catch up. Unset it so that a new one comes up.
+    elsif($cmp==1){
+      undef($kmer2);
+    } else{
+      die "Internal error";
+    }
+  }
+  close KC1; close KC2;
 }
 
 sub jDist{
@@ -126,6 +190,19 @@ sub kmerSets{
 
   return (intersection=>$intersectionCount,union=>$unionCount);
 }
+
+sub kmerCountKAnalyze{
+  my($genome,$settings)=@_;
+  my $minKCoverage=$$settings{coverage};
+  my($name,$path,$suffix)=fileparse($genome,qw(.fastq.gz .fastq .gz));
+  my $rand=int(rand(999999999)); # avoid clashing
+  my $outfile="$$settings{tempdir}/$name.$rand.kc";
+
+  system("count -d $$settings{numcpus} -l $$settings{numcpus} -f fastqgz -k 18 -g 6553600 -o $outfile $genome");
+  die if $?;
+  return $outfile;
+}
+
 
 sub kmerCountJellyfish{
   my($genome,$settings)=@_;
@@ -230,9 +307,10 @@ sub usage{
   Usage: $0 assembly.fasta assembly2.fasta [assembly3.fasta ...]
   -a to note averages. Switching the subject and query can reveal some artifacts in the algorithm.
   -q for minimal stdout
-  -m method.  Can be mummer (default) or jaccard
-    Mummer: uses mummer to discover SNPs and counts the total number
+  -m method.  Can be the following choices
+    Mummer (default): uses mummer to discover SNPs and counts the total number
     Jaccard: (kmer method) counts 18-mers and calculates 1 - (intersection/union)
+    JaccardKAnalyze (Same method as 'Jaccard' but uses KAnalyze)
   -c minimum kmer coverage. Default: 2
   -k kmer length. Default: 18
   -t tempdir Default: tmp
