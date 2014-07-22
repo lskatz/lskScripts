@@ -109,48 +109,81 @@ sub downsample{
 
 sub jDistSortedFile{
   my($kmerFile1,$kmerFile2,$settings)=@_;
-  my($matchCount,$uniqueCount);
+  my($matchCount,$uniqueCount)=(0,0);
   open(KC1,$kmerFile1) or die "ERROR: could not open $kmerFile1:$!";
   open(KC2,$kmerFile2) or die "ERROR: could not open $kmerFile2:$!";
-  my $kmer2;
   while (my $kc1=<KC1>){
+    chomp($kc1);
     my($kmer1,$kmercount1)=split(/\t/,$kc1);
     next if($kmercount1 < $$settings{coverage});
 
-    # Get the second file's kmer if it is unset.
-    if(!$kmer2){
-      my $kmercount2;
-      do{
-        my $kc2=<KC2>; chomp($kc2);
-        ($kmer2,$kmercount2)=split(/\t/,$kc2);
-      } while($kmercount2 < $$settings{coverage});
-    }
+    # Get the second file's kmer 
+    my($kmer2,$kmercount2)=("",0);
+    do{
+      my $kc2=<KC2>; chomp($kc2);
+      last if(!$kc2); # Quit out if this is the end of the file
+      ($kmer2,$kmercount2)=split(/\t/,$kc2);
+    } while($kmercount2 < $$settings{coverage});
+    last if(!$kmer2);   # Stop reading KC1 if there is nothing to compare against
 
-    if($kmer1 eq $kmer2){
+    # Do the test one time for the whole iteration
+    my $cmp=$kmer1 cmp $kmer2;
+
+    if($cmp==0){
       $matchCount++;
+      #print "$kmer1\t$kmer2\t$matchCount\t$uniqueCount\n";
       undef($kmer2); # marks that a new one has to be obtained
       next;
     }
     ############
-    ### MISMATCH
+    # MISMATCH #
     ############
-    $uniqueCount++;
 
-    # if there is no mismatch, figure out how to advance
-    my $cmp=$kmer1 cmp $kmer2;
     # If the left comes before alphabetically, it has to catch up. 
     # Advance to the next kmer1.
-    if($cmp==-1){
-
-    } 
-    # If the right comes before alphabetically, it has to catch up. Unset it so that a new one comes up.
-    elsif($cmp==1){
-      undef($kmer2);
-    } else{
-      die "Internal error";
+    while($cmp==-1){
+      $uniqueCount++;   # Count the current mismatch
+      #print "$kmer1\t$kmer2\t$matchCount\t$uniqueCount\n";
+      do{               # Move onto the next kmer1
+        $kc1=<KC1>;
+        chomp($kc1);
+        last if(!$kc1); # quit out if this is the end of file
+        ($kmer1,$kmercount1)=split(/\t/,$kc1);
+      } while($kmercount1 < $$settings{coverage});  # Keep moving if the coverage isn't good yet
+      $cmp=$kmer1 cmp $kmer2;
     }
+
+    # If the left kmer comes after alphabetically, the right has to catch up.
+    # Advance to the next kmer2.
+    while($cmp==1){
+      $uniqueCount++;
+      #print "$kmer1\t$kmer2\t$matchCount\t$uniqueCount\n";
+      do{
+        my $kc2=<KC2>;
+        chomp($kc2);
+        last if(!$kc2); # quit out if this is the end of file
+        ($kmer2,$kmercount2)=split(/\t/,$kc2);
+      } while($kmercount2 < $$settings{coverage});
+      $cmp=$kmer1 cmp $kmer2;
+    }
+
+    # now that the lines are supposedly equal, seek back to the previous line
+    seek(KC1,-length("$kmer1\t$kmercount1\n"),1);
+    seek(KC2,-length("$kmer2\t$kmercount2\n"),1);
   }
-  close KC1; close KC2;
+  # Close out the files and count mismatches
+  while(<KC1>){
+    $uniqueCount++;
+    #print "KC1\tKC1\t$matchCount\t$uniqueCount\n";
+  }
+  while(<KC2>){
+    $uniqueCount++;
+    #print "KC2\tKC2\t$matchCount\t$uniqueCount\n";
+  }
+  #logmsg "1-$uniqueCount/($matchCount+$uniqueCount)";
+  my $jDist=1-$uniqueCount/($matchCount+$uniqueCount);
+
+  return $jDist;
 }
 
 sub jDist{
@@ -197,6 +230,14 @@ sub kmerCountKAnalyze{
   my($name,$path,$suffix)=fileparse($genome,qw(.fastq.gz .fastq .gz));
   my $rand=int(rand(999999999)); # avoid clashing
   my $outfile="$$settings{tempdir}/$name.$rand.kc";
+  my $informat="";
+  if($suffix eq '.fastq.gz'){
+    $informat="fastqgz";
+  } elsif ($suffix eq '.fastq'){
+    $informat="fastq";
+  } else {
+    die "I have no idea what to do with the extension on $genome ($suffix)";
+  }
 
   system("count -d $$settings{numcpus} -l $$settings{numcpus} -f fastqgz -k 18 -g 6553600 -o $outfile $genome");
   die if $?;
@@ -308,9 +349,9 @@ sub usage{
   -a to note averages. Switching the subject and query can reveal some artifacts in the algorithm.
   -q for minimal stdout
   -m method.  Can be the following choices
-    Mummer (default): uses mummer to discover SNPs and counts the total number
+    Mummer: (default): uses mummer to discover SNPs and counts the total number
     Jaccard: (kmer method) counts 18-mers and calculates 1 - (intersection/union)
-    JaccardKAnalyze (Same method as 'Jaccard' but uses KAnalyze)
+    JaccardKAnalyze: (Same method as 'Jaccard' but uses KAnalyze)
   -c minimum kmer coverage. Default: 2
   -k kmer length. Default: 18
   -t tempdir Default: tmp
