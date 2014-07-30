@@ -110,10 +110,12 @@ sub printNewTree{
 sub ncbiInfo{
   my($oldid,$settings)=@_;
   my $newid;
-  if($oldid =~/^(SAMN|CFSAN)/){
-    $newid=biosampleInfo($oldid,$settings);
-  } elsif($oldid=~/^GC\w/){
+  if($oldid=~/^GC\w/){
     $newid=assemblyInfo($oldid,$settings);
+  } elsif($oldid=~/^SAMN/){
+    $newid=biosampleInfo($oldid,$settings);
+  } elsif($oldid!~/^\d+$/){ # if it's not just an integer
+    $newid=biosampleInfo($oldid,$settings);
   } else{
     logmsg "Warning: I do not know how to query $oldid.";
   }
@@ -153,6 +155,30 @@ sub biosampleInfo{
   my @headers=('strain', 'strain', 'SAMN', 'collection date', 'geographic location (country and/or sea,region)', 'strain', 'isolation source', 'serovar', 'PFGE_PrimaryEnzyme_pattern', 'PFGE_SecondaryEnzyme_pattern', 'Outbreak'); 
   my $newid;
   #die Dumper [$xml,\%attr] if($uid eq 1125831); # see what's happening with GCA_000183845.1
+
+  # Nothing found; see if anything else matches.
+  # Don't do this blanket-search on integer identifiers. They are probably SAMN identifiers and need to be treated differently.
+  if(keys(%attr)<1 && $oldid !~/^\d+$/){
+    $eutil=Bio::DB::EUtilities->new(
+      -eutil => 'esearch',
+      -db    => 'BioSample',
+      -term  => $oldid,
+      -email => "nobody\@cdc.gov",
+      -retmax => 1, # just in case it returns a huge amount when in reality it should be 1
+    );
+    my $xml=$eutil->get_Response->content;
+    my $p=XML::LibXML->new;
+    my $doc=$p->parse_string($xml);
+    my $uid;
+    foreach my $node ($doc->findnodes("eSearchResult/IdList/Id")){
+      $uid=$node->textContent;
+    }
+    # $uid is an integer which is a stand-in for SAMN. Find it through biosampleinfo
+    die "Internal error: uid cannot be a non-integer but it is: $uid" if($uid=~/\D/);
+    return biosampleInfo($uid,$settings);
+  }
+
+  # Nothing found
   if(keys(%attr)<1){
     return $newid;
   }
