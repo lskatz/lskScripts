@@ -67,14 +67,21 @@ sub printNewTree{
       #  logmsg "DEBUG";
       #  last;
       #}
-      my $oldid=$node->id || "";
-      next if(!$oldid);
+      my $oldid=$node->id;
+      next if(!defined($oldid) || $oldid eq "");
       $oldid=~s/^'+|'+$//g; # remove quotes from the ID
       $oldid=~s/^"+|"+$//g; # remove quotes from the ID
-      $oldid=~s/^\Q$d\E//;  # remove any leading delimiters
+      $oldid=~s/^\Q$d\E//g;  # remove any leading delimiters
 
-      $oldid=(split /\Q$d\E/, $oldid)[0];
-      $oldid=~s/\Q$suffix\E$// if($suffix);
+      # split/grep:
+      # Step 1: Split by the delimiter
+      # Step 2: Only retrieve elements that have at least one non-whitespace character
+      # Step 3: Return the zeroth element: that is now $oldid
+      # Step 4: Go to the next iteration in the loop if that doesn't return anything
+      $oldid=(grep{/\S/} split (/\Q$d\E/, $oldid))[0];
+      next if(!defined($oldid) || $oldid eq "");
+
+      $oldid=~s/\Q$suffix\E$//g if($suffix);
       if(defined(my $tail=$$settings{tailSuffix})){
         $oldid=~s/\Q$tail\E.*$//;
       }
@@ -92,10 +99,12 @@ sub printNewTree{
         $newid=$$map{$oldid};
       }
       next if(!$newid);
-      next if($seen{$oldid}++); # I think that somehow nodes were being parsed twice
+      "Warning: I have already seen $oldid in the tree and so it appears more than once" if($seen{$oldid}++); # I think that somehow nodes were being parsed twice
 
       # make some kind of marking on this taxon if it's new-ish
       $newid=highlightIfNew($newid,$$settings{daysRecent},$settings);
+
+      die "ERROR: $oldid => $newid has illegal characters: $1" if($newid=~/(,|\(|\)|:|;)+/);
 
       $node->id($newid);
     }
@@ -110,15 +119,20 @@ sub printNewTree{
 sub ncbiInfo{
   my($oldid,$settings)=@_;
   my $newid;
+
+  # Query for a new identifier using various methods
   if($oldid=~/^GC\w/){
     $newid=assemblyInfo($oldid,$settings);
-  } elsif($oldid=~/^SAMN/){
+  } elsif($oldid=~/^SAM\w/){
     $newid=biosampleInfo($oldid,$settings);
   } elsif($oldid!~/^\d+$/){ # if it's not just an integer
     $newid=biosampleInfo($oldid,$settings);
   } else{
-    logmsg "Warning: I do not know how to query $oldid.";
+    logmsg "Warning: I do not know how to query $oldid. (maybe it's just a bootstrap value)";
   }
+
+  # Remove any characters that might mess up the output Newick format: ,;:()
+  $newid=~s/[\,;\(\)\:]|\s+/_/g;
   return $newid;
 }
 
@@ -126,7 +140,9 @@ sub biosampleInfo{
   my($oldid,$settings)=@_;
   # UID is the identifier without SAMN
   my $uid=$oldid; $uid=~s/^SAMN//i;
+  my $retryConnection=0;  # how many times to try if a connection times out
 
+  EFETCHBIOSAMPLE:
   # make the query
   # e.g. http://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=biosample&id=02389791
   my $eutil=Bio::DB::EUtilities->new(
@@ -136,7 +152,15 @@ sub biosampleInfo{
            -retmax => 10, # just in case it returns a huge amount when in reality it should be 1
            -email => "nobody\@cdc.gov",
   );
-  my $xml=$eutil->get_Response->content;
+  my $xml;
+  eval{
+    $xml=$eutil->get_Response->content;
+  };
+  if($@) {
+    die "Server error: $@." if(++$retryConnection > 5);
+    logmsg "Server error. Retry number $retryConnection\n  $@";
+    goto EFETCHBIOSAMPLE;
+  }
   my $p=XML::LibXML->new;
   my $doc=$p->parse_string($xml);
 
@@ -194,9 +218,10 @@ sub biosampleInfo{
 
 sub assemblyInfo{
   my($oldid,$settings)=@_;
-  #my $uid=$oldid; $uid=~s/^SAMN//i;
+  my $retryConnection=0;
 
   # get the UID
+  ASSEMBLYESEARCH:
   my $eutil=Bio::DB::EUtilities->new(
            -eutil => 'esearch',
            -db => 'assembly',
@@ -225,13 +250,46 @@ sub assemblyInfo{
   my $p2=XML::LibXML->new;
   my $doc2=$p2->parse_string($xml2);
   my @link=($doc2->findnodes("eLinkResult/LinkSet/LinkSetDb/DbTo"));
-  return "" if(!@link || !grep(/biosample/,@link));
-  my $linkid=($doc2->findnodes("eLinkResult/LinkSet/LinkSetDb/Link/Id"))[0]->textContent;
-  my $samn="SAMN$linkid";
-  
-  #die Dumper [$oldid,$uid,$linkid,$samn];
-  return biosampleInfo($samn,$settings);
+  #return "" if(!@link || !grep(/biosample/,@link));
 
+  # Ok now hopefully we have a SAMN biosample identifier.
+  if(grep(/biosample/,@link)){
+    my $linkid=($doc2->findnodes("eLinkResult/LinkSet/LinkSetDb/Link/Id"))[0]->textContent;
+    my $samn="SAMN$linkid";
+
+    my $biosampleNewid=biosampleInfo($samn,$settings);
+    return $biosampleNewid if($biosampleNewid && $biosampleNewid ne $oldid);
+  }
+
+  # If there is no biosample identifier then just get what is in the assembly NCBI database
+  $eutil=Bio::DB::EUtilities->new(
+           -eutil => 'esearch',
+           -db => 'genome',
+           -term=>$oldid,
+           -retmax => 10, # just in case it returns a huge amount when in reality it should be 1
+           -email => "nobody\@cdc.gov",
+  );
+  my $xml3=$eutil->get_Response->content;
+  my $p3=XML::LibXML->new;
+  my $doc3=$p->parse_string($xml3);
+  @link=($doc3->findnodes("eSearchResult/IdList/Id"));
+  my $genomeIdentifier=$link[0]->textContent;
+
+  # Get information from the genome db and return an identifier with that information
+  $eutil=Bio::DB::EUtilities->new(
+          -eutil => 'esummary',
+          -db    => 'genome',
+          -id    => $genomeIdentifier,
+          -email => "nobody\@cdc.gov",
+  );
+  my $ds=$eutil->next_DocSum;
+  my %genomeInfo;
+  while(my $item=$ds->next_Item('flattened')){
+    $genomeInfo{$item->get_name}=$item->get_content || "";
+  }
+  my $assemblyId=join($$settings{delimiter},$genomeInfo{Organism_Name},$genomeInfo{DefLine},$genomeInfo{Create_Date},$oldid);
+  logmsg "New ID found through the genome database API: $assemblyId";
+  return $assemblyId;
 }
 
 sub highlightIfNew{
