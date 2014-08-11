@@ -13,10 +13,11 @@ exit(main());
 
 sub main{
   my $settings={};
-  GetOptions($settings,qw(prefix=s help));
+  GetOptions($settings,qw(prefix=s defline-format=s help));
   die usage() if($$settings{help});
   
   my $prefix=$$settings{prefix}||"$0.out";
+  $$settings{'defline-format'}||="incremental";
   my $alnFile=shift(@ARGV) || die "ERROR: need an alignment file\n".usage();
   die "ERROR: you gave more than one alignment file: ".join(", ",@ARGV)."\n".usage() if(@ARGV>1);
 
@@ -46,8 +47,20 @@ sub printResults{
   my $STcounter=0;
   while(my($sequence,$idArr)=each(%$strainSeq)){
     $STcounter++;
-    print ALN ">$STcounter\n$sequence\n";
-    print STS join("\t",$STcounter,join(" ",@$idArr))."\n";
+
+    my $idStr=join("__",@$idArr);
+    
+    my $defline;
+    if($$settings{'defline-format'} eq 'incremental'){
+      $defline=$STcounter;
+    }elsif($$settings{'defline-format'} eq 'join'){
+      $defline=$idStr." ST:$STcounter";
+    } else{
+      die "ERROR: Could not understand defline-format parameter\n".usage();
+    }
+
+    print ALN ">$defline\n$sequence\n";
+    print STS join("\t",$defline,$idStr)."\n";
   }
   close ALN; close STS;
   print "Wrote $prefix.aln.fas and $prefix.STs.txt\n";
@@ -58,5 +71,6 @@ sub usage{
   Converts an alignment into sequence types and the boiled down alignment, removing redundant ST entries.
   Usage: $0 file.aln -p prefix
     -p prefix for output files: \$p.STs.aln and \$p.STs
+    --defline-format incremental  Options: incremental (default), or join
   "
 }
