@@ -91,7 +91,7 @@ sub medianAbsoluteDeviation{
 }
 
 sub usage{
-  "Gets mean and stdev from stdin. And now median.
+  "Gets mean and stdev from stdin. And now median, [Q1,Q3], [min-max], and median absolute distance.
   Usage: cat 'listofdata.txt' | $0
   Another example: samtools depth bowtieAssembly.bam | cut -f 3| $0
 
