@@ -64,12 +64,30 @@ sub main{
   # weighted distribution
   #print $stat->quantile(1)."\n";
   printf("Median: %0.2f [%0.2f,%0.2f] [%0.1f-%0.1f]\n",$stat->median(),$stat->quantile(1),$stat->quantile(3),$min,$max);
+  printf("MAD: %0.2f\n",medianAbsoluteDeviation(\@data,$settings));
 
   if(@badData && $$settings{warnings}){
     warn "Warning: these data points were not used because they do not look like numbers: \n=>".join("\n=>",@badData)."\n";
   }
 
   return 0;
+}
+
+# Median absolute deviation (MAD):
+#   1. All the absolute distances from the median
+#   2. Take the median of those absolute distances
+sub medianAbsoluteDeviation{
+  my($data,$settings)=@_;
+  my $stat=Statistics::Descriptive::Full->new();
+  $stat->add_data(@$data);
+  my $median=$stat->median();
+  my @deviation;
+  for(my $i=0;$i<@$data;$i++){
+    push(@deviation,abs($$data[$i] - $median));
+  }
+  my $stat2=Statistics::Descriptive::Full->new();
+  $stat2->add_data(@deviation);
+  return $stat2->median;
 }
 
 sub usage{
