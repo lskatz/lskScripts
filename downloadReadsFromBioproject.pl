@@ -34,6 +34,8 @@ sub main{
 
   logmsg "Getting SRA Experiment IDs for this project";
   my @sraId=getSraIds($$settings{project},$settings);
+  logmsg "prefetching ".scalar(@sraId)." read sets. Fortunately prefetch does know whether something has already been prefetched.";
+  prefetch(\@sraId,$settings);
   logmsg "Getting run IDs for the SRA Experiments";
   my @srrId=getSrrIds(\@sraId,$settings);
   logmsg "Found ".scalar(@srrId)." read sets associated with $$settings{project}";
@@ -80,15 +82,25 @@ sub getSrrIds{
   return \@id;
 }
 
+sub prefetch{
+  my($id,$settings)=@_;
+  for(my $i=0;$i<@$id;$i++){
+    system("prefetch $$id[$i]");
+    die "ERROR with prefetch command from sra-tools" if $?;
+  }
+  return scalar(@$id);
+}
+
 sub downloadReads{
   my($srrId,$inbox,$settings)=@_;
   for my $id (@$srrId){
     my($read1,$read2,$shuffled)=("$inbox/$id"."_1.fastq","$inbox/$id"."_2.fastq","$inbox/$id.shuffled.fastq.gz");
     next if(!$$settings{force} && -e $shuffled);
     logmsg "Downloading and formatting $id";
-    $sge->pleaseExecute("fastq-dump -O $inbox/ -I --split-files $id && run_assembly_shuffleReads.pl $read1 $read2 | gzip -c > $shuffled.tmp && rm -v $read1 $read2 && mv $shuffled.tmp $shuffled -v",{jobname=>"sra$id",numcpus=>1,noqsub=>1});
+    $sge->pleaseExecute("fastq-dump -O $inbox/ -I --split-files $id && run_assembly_shuffleReads.pl $read1 $read2 | gzip -c > $shuffled.tmp && rm -v $read1 $read2 && mv $shuffled.tmp $shuffled -v",{jobname=>"sra$id",numcpus=>1});
     die if $?;
   }
+  $sge->wrapItUp();
 }
 
 sub usage{
