@@ -1,5 +1,8 @@
 #!/usr/bin/env perl
 
+# Author: Lee Katz <lkatz@cdc.gov>
+# Debugging help from Taylor Griswold <TGriswold@cdc.gov>
+
 use strict;
 use warnings;
 use Bio::Perl;
@@ -27,10 +30,10 @@ sub main{
   $start=1 if($start<1);
 
   my $seq=extractSeqs($file,$start,$settings);
-
+  
   my $seqout=Bio::SeqIO->new(-file=>">$outfile");
   $seqout->write_seq($_) for(@$seq);
-
+  
   print "Output file is in $outfile\n";
 
   return 1;
@@ -71,6 +74,7 @@ sub extractSeqs{
 }
 
 sub extractSeq{
+
   my($targetSeq,$start,$revcom,$settings)=@_;
   my $end=$$settings{end}||$targetSeq->length;
 
@@ -80,8 +84,12 @@ sub extractSeq{
   $end=$targetSeq->length if($end>$targetSeq->length);
 
   print "Extracting and highlighting features in contig ".$targetSeq->id." from $start to $end\n";
-  my $truncSeq=$targetSeq->trunc($start,$end);
+  my $truncSeq=$targetSeq->trunc($start,$end);  
   $truncSeq=$truncSeq->revcom if($revcom);
+  
+  # removes all previously determined features from truncSeq because of potential duplicate features
+  $truncSeq->remove_SeqFeatures;
+  
   my $seqLength=$end-$start+1;
   my $organism=($targetSeq->species)?
     join(" ",$targetSeq->species->binomial):
@@ -106,6 +114,7 @@ sub extractSeq{
   } @feat;
 
   for my $feat(@feat){
+	
     my $subseqFeatStart=$feat->location->start-$start+1;
     my $subseqFeatEnd=$feat->location->end-$start+1;
     my $strand=$feat->strand;
@@ -124,15 +133,17 @@ sub extractSeq{
     print join("_",$subseqFeatStart,$subseqFeatEnd,$strand,@gene)."\n";
 
     next if(ref($feat->location) ne "Bio::Location::Simple");
+	
     $subseqFeatStart=1 if($subseqFeatStart<1);
     $subseqFeatEnd=$seqLength if($subseqFeatEnd>$seqLength);
+
 
     $feat->location->start($subseqFeatStart);
     $feat->location->end($subseqFeatEnd);
     $feat->strand($strand);
     $truncSeq->add_SeqFeature($feat);
   }
-
+  
   #$truncSeq->seq(lc($truncSeq->seq)); # lc the sequence so that it can be highlighted
   #highlightFeatures($truncSeq,$settings);
 
