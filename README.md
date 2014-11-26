@@ -89,7 +89,6 @@ USAGE
      where the first sequence is a reference sequence at /home/lkatz/bin/phylovizFilePrep.pl line 20.
 
     sortFastq.pl
-    Created tempdir /tmp/main.10144.Jgkhf
     Allows for better compression of reads by sorting them. Uses smalt under the hood. CGP fast assembly for an assembler.
       Usage: /home/lkatz/bin/sortFastq.pl [-r reference.fasta] < reads.fastq | gzip -c > sorted.fastq.gz
       -r reference.fasta If not supplied, then the reads will be assembled to create one.
