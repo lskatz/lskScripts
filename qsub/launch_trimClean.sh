@@ -5,6 +5,7 @@
 #$ -cwd -V
 #$ -o trimClean.log -j y
 #$ -N cgpTrimClean
+#$ -q all.q
 
 reads=$1
 out=$2
