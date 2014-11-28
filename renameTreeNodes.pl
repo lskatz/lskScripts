@@ -17,13 +17,14 @@ sub logmsg{print STDERR "$0: @_\n";};
 exit main();
 sub main{
   my $settings={};
-  GetOptions($settings,qw(help map=s delimiter=s suffix=s tailSuffix=s daysRecent=i markup=s)) or die;
+  GetOptions($settings,qw(help map=s delimiter=s suffix=s tailSuffix=s daysRecent=i markup=s discard-old newmap=s)) or die;
   die usage() if($$settings{help});
   my $mapFile=$$settings{map} || die "ERROR: need the map file\n".usage();
   $$settings{delimiter}||='|';
   $$settings{suffix}||="";
   $$settings{daysRecent}||=0;
   $$settings{markup}||='!!';
+  $$settings{'discard-old'}||=0;
   my $inTree=$ARGV[0] || die "ERROR: need tree file\n".usage();
   
   my $map=readMap($mapFile,$settings);
@@ -58,20 +59,23 @@ sub printNewTree{
   my $d=$$settings{delimiter} || die "ERROR: there is no delimiter\n".usage();
   my $suffix=$$settings{suffix};
   my $in=Bio::TreeIO->new(-file=>$inTree);
-  my $out=Bio::TreeIO->new(); # stdout
+  #my $out=Bio::TreeIO->new(); # stdout
   my %seen;
-  my $i=0;
+  my $i=0; # node counter
+  my $deleteCounter=0;
+  my $NEWMAP;
+  if($$settings{newmap}){ open($NEWMAP,">",$$settings{newmap}) or die "ERROR: could not open $$settings{newmap} for writing:$!";}
   while(my $tree=$in->next_tree){
-    for my $node($tree->get_nodes){
+    for my $node($tree->get_leaf_nodes){
       #if ($i++>100){
       #  logmsg "DEBUG";
       #  last;
       #}
-      my $oldid=$node->id;
-      next if(!defined($oldid) || $oldid eq "");
+      my $oldid=$node->id || "";
       $oldid=~s/^'+|'+$//g; # remove quotes from the ID
       $oldid=~s/^"+|"+$//g; # remove quotes from the ID
       $oldid=~s/^\Q$d\E//g;  # remove any leading delimiters
+      next if(!$oldid);
 
       # split/grep:
       # Step 1: Split by the delimiter
@@ -99,20 +103,51 @@ sub printNewTree{
         $newid=$$map{$oldid};
       }
       next if(!$newid);
-      "Warning: I have already seen $oldid in the tree and so it appears more than once" if($seen{$oldid}++); # I think that somehow nodes were being parsed twice
+
+      # print to the TSV if this is a new identifier that should be saved locally
+      if($newid ne $oldid && $$settings{newmap}){
+        printNewmapId($oldid,$newid,$NEWMAP,$settings);
+      }
+
+      if($seen{$oldid}++){
+        logmsg "Warning: I have already seen this id in the tree and so it appears more than once\n  $newid";
+        $newid="$newid$$settings{delimiter}DuplicateNumber$seen{$oldid}";
+      }
 
       # make some kind of marking on this taxon if it's new-ish
-      $newid=highlightIfNew($newid,$$settings{daysRecent},$settings);
+      if(isDocNew($newid,$$settings{daysRecent},$settings)){
+        logmsg "Found a new sample and will mark it\n  $newid";
+        $newid="$$settings{markup} $newid";
+      } 
+      # If the DOC is not new and the user only wants new nodes
+      elsif($$settings{'discard-old'}) {
+        logmsg "Discarding because it is older than $$settings{daysRecent} days old\n  $newid";
+        #$tree->remove_Node($node);
+        #$tree->splice(-remove_id=>[$oldid],-preserve_lengths=>0);
+        $newid="-----".++$deleteCounter;
+      }
 
       die "ERROR: $oldid => $newid has illegal characters: $1" if($newid=~/(,|\(|\)|:|;)+/);
 
       $node->id($newid);
     }
-    $out->write_tree($tree);
-    print "\n";
+    print $tree->as_text('newick')."\n";next;
+    #$out->write_tree($tree);
+    #print "\n";
   }
   logmsg scalar(keys(%seen))." entries were converted";
+  close $NEWMAP if($$settings{newmap});
   return 1;
+}
+
+sub printNewmapId{
+  my($oldid,$newid,$NEWMAP,$settings)=@_;
+  # TODO consider if there is an escaped delimiter like \|
+  my $d=$$settings{delimiter};
+  my @F=split(/\Q$d\E/,$newid);
+  my $line=join("\t",$oldid,@F)."\n";
+  print $NEWMAP $line;
+  return length($line);
 }
 
 # go onto NCBI and grab information pertaining to this identifier.
@@ -138,6 +173,7 @@ sub ncbiInfo{
 
 sub biosampleInfo{
   my($oldid,$settings)=@_;
+  return "" if(!defined($oldid) || !$oldid);
   # UID is the identifier without SAMN
   my $uid=$oldid; $uid=~s/^SAMN//i;
   my $retryConnection=0;  # how many times to try if a connection times out
@@ -157,8 +193,9 @@ sub biosampleInfo{
     $xml=$eutil->get_Response->content;
   };
   if($@) {
-    die "Server error: $@." if(++$retryConnection > 5);
+    die "Server error querying $oldid\n $@." if(++$retryConnection > 5);
     logmsg "Server error. Retry number $retryConnection\n  $@";
+    #sleep $retryConnection; # sleep as many seconds as is the retry, so that you can give the server time to get back to normal
     goto EFETCHBIOSAMPLE;
   }
   my $p=XML::LibXML->new;
@@ -292,7 +329,9 @@ sub assemblyInfo{
   return $assemblyId;
 }
 
-sub highlightIfNew{
+# See if the date of collection (DOC) is newer than XX days
+# Returns 0 if it's old; the number of days if it is new.
+sub isDocNew{
   my($newid,$daysRecentThreshold,$settings)=@_;
   my @F=split(/\|/,$newid);
 
@@ -304,24 +343,13 @@ sub highlightIfNew{
     my $timestamp=parsedate($_,UK=>0) || 0;
     next if($timestamp==0 || !$_); # zero indicates that it didn't parse as a date
     $newestTimestamp=$timestamp if($timestamp > $newestTimestamp);
-
-    ## Debuging to figure out if the timestamps are generated correctly
-    #my($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime($newestTimestamp);
-    #$year+=1900;
-    #$mon++;
-    #my $date="$year-$mon-$mday";
-    #logmsg "$_ => $timestamp => $date";
   }
-
   # if it is X days old, then make a mark on $newid
   my $daysOld=ceil((time - $newestTimestamp) / 3600 / 24);
   if($daysOld < $daysRecentThreshold){
-    logmsg "Found a new sample and will mark it\n  $newid";
-    my $markup=$$settings{markup};
-    $newid="$markup$daysOld$markup $newid";
+    return $daysOld;
   }
-
-  return $newid;
+  return 0;
 }
 
 sub usage{
@@ -331,12 +359,14 @@ sub usage{
     The map file is tab-delimited with two columns: FROM  TO [TO_2...]
     Where any node in the tree with the FROM name will be converted to the TO name
     Multiple TO fields will be concatenated with the delimiter (given by -d)
-  --delimiter delimiter Default:|
+  --newmap new.tsv  Create a new TSV with the information you've downloaded, so that the process goes more quickly next time.
+  --delimiter delimiter  Default:|
     A delimiter for the FROM tree. The first field with be used to convert the identifier.
-  -days 0 The number of days since today for a genome to be 'recent'
-  --markup '!!' the markup given to new isolates in the format of '!!%d!!' with the number of days shown where %d is
-  -s suffix Default: nothing
+  --daysRecent 0         The number of days since today for a genome to be 'recent'
+  --discard-old          To discard taxa that are older than 'days'
+  --markup '!!'          The markup given to new isolates in the format of '!!%d!!' with the number of days shown where %d is
+  -s suffix              Default: nothing
     If set, this suffix will be trimmed off the IDs in the source phylogeny
-  --tailSuffix character. Everything after this character will be removed
+  --tailSuffix character Everything after this character will be removed
   "
 }
