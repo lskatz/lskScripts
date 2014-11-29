@@ -140,25 +140,25 @@ sub printReadsFromBam{
 
 sub sortByBinning{
   my($fastq1,$fastq2,$settings)=@_;
-  my $unsorted1=readFastqIntoHash($fastq1,$settings);
-  my $unsorted2=readFastqIntoHash($fastq2,$settings);
+  my $unsorted=readFastqIntoHash([$fastq1,$fastq2],$settings);
 
-  my @sorted1;
+  my @sorted;
   if($$settings{method} eq 'binbyalpha'){
-    @sorted1=sort{$$a{seq} cmp $$b{seq} } values(%$unsorted1);
+    # just sort by the first seq
+    @sorted=sort{$$a{seq1} cmp $$b{seq1} } values(%$unsorted);
   } elsif ($$settings{method} eq 'binbygc'){
-    @sorted1=sort{$$a{gc} <=> $$b{gc}} values(%$unsorted1);
+    @sorted=sort{$$a{gc} <=> $$b{gc}} values(%$unsorted);
   } else {
     die "ERROR: I could not understand method ($$settings{method})";
   }
 
   # print out the results
-  my $numReads=@sorted1;
+  logmsg "Printing the reads";
+  my $numReads=@sorted;
   for(my $i=0;$i<$numReads;$i++){
-    print "$sorted1[$i]{defline}\n$sorted1[$i]{seq}\n+\n$sorted1[$i]{qual}\n";
+    print "$sorted[$i]{defline1}\n$sorted[$i]{seq1}\n+\n$sorted[$i]{qual1}\n";
     if($$settings{paired}){
-      my $key=$sorted1[$i]{key};
-      print "$$unsorted2{$key}{defline}\n$$unsorted2{$key}{seq}\n+\n$$unsorted2{$key}{qual}\n" if($$settings{paired});
+      print "$sorted[$i]{defline2}\n$sorted[$i]{seq2}\n+\n$sorted[$i]{qual2}\n";
     }
   }
 }
@@ -183,43 +183,52 @@ sub readFastq{
 }
 sub readFastqIntoHash{
   my($file,$settings)=@_;
-  logmsg "Reading $file into memory";
+  my($file1,$file2)=@$file;
+  logmsg "Reading $file1 and $file2 into memory";
   my $seqs;
-  open(FASTQ,$file) or die "ERROR: cannot read $file: $!";
-  while(my $defline=<FASTQ>){
-    my ($key,@desc)=split(/\s+/,$defline);
-    die "ERROR: no key for $defline" if(!$key);
+  open(FASTQ1,$file1) or die "ERROR: cannot read $file1: $!";
+  my $PE=1;
+  if(-e $file2 && -s $file2 > 0){
+    open(FASTQ2,$file2) or die "ERROR: cannot read $file2: $!";
+    $PE=1;
+  } else {
+    $PE=0;
+  }
+  while(my $defline1=<FASTQ1>){
+    my ($key,@desc1)=split(/\s+/,$defline1);
+    die "ERROR: no key for $defline1" if(!$key);
     $key=~s/^\@//;
-    $$seqs{$key}{defline}=$defline; # whole defline
+    $$seqs{$key}{defline1}=$defline1; # whole defline
     $$seqs{$key}{key}=$key;         # text before whitespace
-    $$seqs{$key}{desc}=join(" ",@desc);
-    $$seqs{$key}{seq}=<FASTQ>;
-    <FASTQ>; # burn the + line
-    $$seqs{$key}{qual}=<FASTQ>;
-    chomp($$seqs{$key}{qual},$$seqs{$key}{defline},$$seqs{$key}{seq},$$seqs{$key}{desc});
+    $$seqs{$key}{desc1}=join(" ",@desc1);
+    $$seqs{$key}{seq1}=<FASTQ1>;
+    <FASTQ1>; # burn the + line
+    $$seqs{$key}{qual1}=<FASTQ1>;
+
+    if($PE){
+      $$seqs{$key}{defline2}=<FASTQ2>;
+      my (undef,@desc2)=split(/\s+/,$$seqs{$key}{defline2});
+      $$seqs{$key}{desc2}=join(" ",@desc2);
+      $$seqs{$key}{seq2}=<FASTQ2>;
+      <FASTQ2>; # burn the + line
+      $$seqs{$key}{qual2}=<FASTQ2>;
+    }
+
+    # TODO figure out the warnings here when it is SE
+    chomp($$seqs{$key}{$_}) for(qw(qual1 defline1 seq1 desc1));
+    if($PE){
+      chomp($$seqs{$key}{$_}) for(qw(qual2 defline2 seq2 desc2 qual2));
+    }
 
     # some derivative values that will need to be calculated
-    $$seqs{$key}{length}=length($$seqs{$key}{seq});
-    $$seqs{$key}{gc}=($$seqs{$key}{seq}=~s/([GC])/$1/gi)/$$seqs{$key}{length};
+    my $tmpSeq=$$seqs{$key}{seq1};
+    $tmpSeq.=$$seqs{$key}{seq2} if($PE);
+    $$seqs{$key}{length}=length($tmpSeq);
+    $$seqs{$key}{gc}=($tmpSeq=~s/([GC])/$1/gi) / $$seqs{$key}{length};
   }
-  close FASTQ;
+  close FASTQ1;
+  close FASTQ2 if($PE);
   return $seqs;
-}
-
-sub readFastqDefline{
-  my($file,$settings)=@_;
-  my $defline;
-  open(FASTQ,$file) or die "ERROR: cannot read $file: $!";
-  while(my $id=<FASTQ>){
-    chomp $id;
-    $id=~s/^\@//;
-    my($identifer,@desc)=split(/\s+/,$id);
-    my $desc=join(" ",@desc);
-    <FASTQ> for(1..3); # burn these lines
-    $$defline{$identifer}=$desc;
-  }
-  close FASTQ;
-  return $defline;
 }
 
 sub usage{
