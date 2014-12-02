@@ -160,6 +160,8 @@ sub ncbiInfo{
     $newid=assemblyInfo($oldid,$settings);
   } elsif($oldid=~/^SAM\w/){
     $newid=biosampleInfo($oldid,$settings);
+  } elsif($oldid=~/^PNUSA\w/){
+    $newid=biosampleInfoFromName($oldid,$settings);
   } elsif($oldid!~/^\d+$/){ # if it's not just an integer
     $newid=biosampleInfo($oldid,$settings);
   } else{
@@ -168,7 +170,44 @@ sub ncbiInfo{
 
   # Remove any characters that might mess up the output Newick format: ,;:()
   $newid=~s/[\,;\(\)\:]|\s+/_/g;
+
+  # if the identifier is just a number then it didn't get converted correctly. Revert!
+  my $d=$$settings{delimiter};
+  my $tmpid=$newid;
+  $tmpid=~s/\s+//g;    # remove whitespace
+  $tmpid=~s/\Q$d\E//g; # remove delimiters
+  if($tmpid=~/^\d+$/){ # if it's only numbers
+    logmsg "Reverted! $newid back to $oldid";
+    $newid=$oldid;
+  }
+
   return $newid;
+}
+
+sub biosampleInfoFromName{
+  my($oldid,$settings)=@_;
+  return "" if(!defined($oldid) || !$oldid);
+  my $query=$oldid;
+  my $retryConnection=0;  # how many times to try if a connection times out
+
+  my $eutil=Bio::DB::EUtilities->new(
+      -eutil => 'esearch',
+      -db    => 'BioSample',
+      -term  => $oldid,
+      -email => "nobody\@cdc.gov",
+      -retmax => 1, # just in case it returns a huge amount when in reality it should be 1
+  );
+  my $xml=$eutil->get_Response->content;
+  my $p=XML::LibXML->new;
+  my $doc=$p->parse_string($xml);
+  my $uid;
+  foreach my $node ($doc->findnodes("eSearchResult/IdList/Id")){
+    $uid=$node->textContent;
+  }
+  # $uid is an integer which is a stand-in for SAMN. Find it through biosampleinfo
+  die "Internal error: uid cannot be a non-integer but it is: $uid" if($uid=~/\D/);
+  logmsg "$oldid => $uid";
+  return biosampleInfo($uid,$settings);
 }
 
 sub biosampleInfo{

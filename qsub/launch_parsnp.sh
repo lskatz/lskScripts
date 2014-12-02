@@ -23,6 +23,6 @@ fi;
 
 NSLOTS=${NSLOTS:=8}
 
-c="parsnp -c -R 1 -g $refGbk -d $asmDir -p $NSLOTS -o $out"
+c="parsnp -a 13 -c -R 1 -g $refGbk -d $asmDir -p $NSLOTS -o $out"
 $c # run the command
 if [ $? -gt 0 ]; then echo -e "ERROR with parsnp\n  $c"; exit 1; fi;

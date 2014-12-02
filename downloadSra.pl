@@ -16,8 +16,9 @@ sub main{
   my $settings={
     checkexecs=>1,
   };
-  GetOptions($settings,qw(help tempdir=s checkexecs! only-paired-end)) or die $!;
-  die usage() if(!@ARGV);
+  GetOptions($settings,qw(help tempdir=s checkexecs! only-paired-end only-print-SRRs!)) or die $!;
+  die usage() if(!@ARGV || $$settings{help});
+  $$settings{'only-print-SRRs'}||=0;
   $$settings{tempdir}||=tempdir( CLEANUP => 1 );
   logmsg "Temporary directory is $$settings{tempdir}";
 
@@ -25,6 +26,10 @@ sub main{
 
   checkForEdirect() if($$settings{checkexecs});
   my $SRA=findSraId($query,$settings);
+  if($$settings{'only-print-SRRs'}){
+    print join("\t",$query,@$SRA)."\n";
+    return 0;
+  }
   ACCESSION: 
   for my $sra(@$SRA){
     my $fastq=downloadSra($sra,$settings);
@@ -132,5 +137,6 @@ sub usage{
   -t tempdir Default: one will be made for you
   -nocheck to not check for executables
   --only-paired-end to not accept single end runs.
+  --only-print-SRRs Do not download, but do print the accessions
   "
 }
