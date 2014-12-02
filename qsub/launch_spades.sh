@@ -1,6 +1,6 @@
 #!/bin/bash -l
 #$ -S /bin/bash
-#$ -pe smp 16
+#$ -pe smp 4-16
 #$ -cwd -V
 #$ -o spades.log
 #$ -j y

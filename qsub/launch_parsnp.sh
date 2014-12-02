@@ -21,7 +21,7 @@ if [ "$out" == "" ]; then
   exit 1;
 fi;
 
-NSLOTS=${NSLOTS:=8}
+NSLOTS=${NSLOTS:=12}
 
 c="parsnp -a 13 -c -R 1 -g $refGbk -d $asmDir -p $NSLOTS -o $out"
 $c # run the command
