@@ -13,8 +13,10 @@ sub logmsg{print STDERR "$0: @_\n";}
 exit main();
 sub main{
   my $settings={};
-  GetOptions($settings,qw(help test));
+  GetOptions($settings,qw(help test operation=s));
   die usage() if($$settings{help});
+  $$settings{operation}||="\$next - \$cur";
+  #$$settings{operation}=quotemeta($$settings{operation});
   
   if($$settings{test}){
     test($settings);
@@ -30,7 +32,13 @@ sub printDifferences{
   my $cur=<>; chomp($cur);
   while(my $next=<>){
     chomp($next);
-    print(($next-$cur)."\n");
+
+    # do the math
+    my $answer=eval($$settings{operation});
+    if($@){
+      die "ERROR: $$settings{operation} resulted in a failure: $@";
+    }
+    print "$answer\n";
     $cur=$next;
   }
 }
@@ -43,8 +51,12 @@ sub test{
 }
 
 sub usage{
-  "Calculates the difference between rows
+  "Calculates the difference between rows or a custom arithmetic 
   Usage: sort -n numbers.txt | $0 > difference.txt
+  -o 'custom arithmetic'
+    Variables: \$cur is the first row in the iteration
+               \$next is the second row
+    Example:   \$next - \$cur
   "
 }
 
