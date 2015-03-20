@@ -11,7 +11,8 @@ exit main();
 
 sub main{
   my $settings={};
-  GetOptions($settings,qw(help));
+  GetOptions($settings,qw(help root=s));
+  $$settings{root}||="";
   exit usage() if($$settings{help});
 
   my(@tree)=@ARGV;
@@ -29,35 +30,54 @@ sub printPhylogeneticOrder{
   my $numtaxa=0;
   my $in=Bio::TreeIO->new(-file=>$tree);
   while(my $tree=$in->next_tree){
-    #reroot($tree,$settings);
+    reroot($tree,$settings) if($$settings{root});
     for my $node($tree->get_nodes(-order=>"depth")){ # other choice: "breadth"
       next if(!$node->is_Leaf);
-      print $node->id."\n";
+      my $id=$node->id;
+      $id=~s/^'|'$//g; # remove single quotes at beginning/end that bioperl adds
+      print "$id\n";
     }
   }
   $in->close;
 }
 
-# TODO use $node->branch_length to determine the longest branch length for rooting
 sub reroot{
   my($tree,$settings)=@_;
-  my @node=$tree->get_leaf_nodes;
-  my %distance;
-  my $numnodes=@node;
-  my $largestDistance=0;
-  for(my $i=0;$i<$numnodes;$i++){
-    my $id1=$node[$i]->id;
-    for(my $j=0;$j<$numnodes;$j++){
-      my $id2=$node[$j]->id;
-      $distance{$id1}{$id2}=$tree->distance(-nodes=>[$node[$i],$node[$j]])
+  # TODO validate that {root} eq 'midpoint' or a node name
+  if($$settings{root} =~/^longest$/i){
+    # converge on a longest branch
+    _rerootLongestBranch($tree,$settings) for(1..10);
+  } else {
+    # Reroot on whichever node matches.
+    # NOTE: the name is not validated here and so 
+    # rerooting might not happen if the ID is not found.
+    for my $node($tree->get_leaf_nodes){
+      $tree->reroot($node) if($node->id eq $$settings{root});
     }
   }
-  die Dumper \%distance;
-  #tree->reroot($farthestNode);
+}
+
+sub _rerootLongestBranch{
+  my($tree,$settings)=@_;
+
+  my @node=$tree->get_nodes;
+  my $outgroup=$node[0];
+  my $longest=$node[0]->branch_length || 0;
+
+  for(my $i=1;$i<@node;$i++){
+    if($node[$i]->branch_length() > $longest){
+      $longest=$node[$i]->branch_length;
+      $outgroup=$node[$i];
+      #print join("\t",$outgroup->id,$longest)."\n";
+    }
+  }
+
+  $tree->reroot($outgroup);
 }
 
 sub usage{
   "$0: determine the phylogenetic order from a tree file
   Usage: $0 tree.dnd
+  --root longest  Reroot the tree at the longest branch.  If you supply a taxon ID then it will root on the branch leading to it instead.
   "
 }
