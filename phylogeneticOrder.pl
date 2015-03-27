@@ -13,7 +13,7 @@ sub main{
   my $settings={};
   GetOptions($settings,qw(help root=s));
   $$settings{root}||="";
-  exit usage() if($$settings{help});
+  die usage() if($$settings{help});
 
   my(@tree)=@ARGV;
   die "ERROR: need a tree file!\n".usage() if(!@tree);
