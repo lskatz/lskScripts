@@ -8,6 +8,7 @@ use Data::Dumper;
 use Getopt::Long;
 use File::Basename;
 use File::Spec;
+use File::Temp qw/tempdir/;
 
 my $start=time;
 
@@ -18,12 +19,12 @@ sub main{
   my $settings={};
   GetOptions($settings,qw(help averages quiet method=s coverage=i kmerlength=i tempdir=s numcpus=i downsample=s)) or die $!;
   die usage() if(!@ARGV || $$settings{help});
-  my @asm=@ARGV;
+  my($ref,@query)=@ARGV;
   $$settings{method}||="mummer";
   $$settings{method}=lc($$settings{method});
   $$settings{coverage}||=2; $$settings{coverage}=1 if($$settings{coverage}<1);
   $$settings{kmerlength}||=18;
-  $$settings{tempdir}||="tmp";
+  $$settings{tempdir}||=tempdir(TEMPLATE=>"genomeDistXXXXXX",CLEANUP=>1,TMPDIR=>1);
   $$settings{numcpus}||=1;
   $$settings{downsample}||=0;
 
@@ -32,29 +33,32 @@ sub main{
     mkdir $$settings{tempdir};
     die $! if $?;
   }
+  logmsg "Temp dir is $$settings{tempdir}";
 
   # GENOME DISTANCE METHODS
   if($$settings{method} eq 'mummer'){
-    my $pdist=mummer(\@asm,$settings);
+    my $pdist=mummer($ref,\@query,$settings);
+    ...;
     
-    print join("\t",".",@asm)."\n";
-    for(my $i=0;$i<@asm;$i++){
-      my $asm1=$asm[$i];
-      print "$asm1\t";
-      for(my $j=0;$j<@asm;$j++){
-        my $asm2=$asm[$j];
-        my $num=$$pdist{$asm1}{$asm2};
-        $num=($$pdist{$asm1}{$asm2} + $$pdist{$asm2}{$asm1})/2 if($$settings{averages});
-        print "$num\t";
-      }
-      print "\n";
-    }
+#    # TODO move this to the mummer sub
+#    print join("\t",".",$ref,@query)."\n";
+#    for(my $i=0;$i<@asm;$i++){
+#      my $asm1=$asm[$i];
+#      print "$asm1\t";
+#      for(my $j=0;$j<@asm;$j++){
+#        my $asm2=$asm[$j];
+#        my $num=$$pdist{$asm1}{$asm2};
+#        $num=($$pdist{$asm1}{$asm2} + $$pdist{$asm2}{$asm1})/2 if($$settings{averages});
+#        print "$num\t";
+#      }
+#      print "\n";
+#    }
   }
   elsif($$settings{method} eq 'jaccard'){
-    jaccardDistance(\@asm,$settings);
+    jaccardDistance($ref,\@query,$settings);
   }
   elsif($$settings{method} eq 'jaccardkanalyze'){
-    jaccardKAnalyze(\@asm,$settings);
+    jaccardKAnalyze($ref,\@query,$settings);
   }
   else {
     die "I do not know how to perform method $$settings{method}";
@@ -64,35 +68,43 @@ sub main{
 }
 
 sub jaccardDistance{
-  my($genome,$settings)=@_;
+  my($ref,$query,$settings)=@_;
   my %jDist;
 
-  downsample($genome,$settings) if($$settings{downsample});
-
-  for(my $i=0;$i<@$genome-1;$i++){
-    logmsg "Comparing $$genome[$i]";
-    my %k1=kmerCountJellyfish($$genome[$i],$settings);
-    for(my $j=$i+1;$j<@$genome;$j++){
-      my %k2=kmerCountJellyfish($$genome[$j],$settings);
-      my $jDist=jDist(\%k1,\%k2,$settings);
-      print join("\t",@$genome[$i,$j],$jDist)."\n";
-    }
+  if($$settings{downsample}){
+    my @genome=downsample([$ref,@$query],$settings);
+    $ref=shift(@genome);
+    $query=\@genome;
+  }
+  
+  my %refK=kmerCountJellyfish($ref,$settings);
+  for(my $j=0;$j<@$query;$j++){
+    my %queryK=kmerCountJellyfish($$query[$j],$settings);
+    my $jDist=jDist(\%refK,\%queryK,$settings);
+    print join("\t",$ref,$$query[$j],$jDist)."\n";
   }
 }
 
 sub jaccardKAnalyze{
-  my($genome,$settings)=@_;
+  my($ref,$query,$settings)=@_;
   my %jDist;
-  downsample($genome,$settings) if($$settings{downsample});
-  for(my $i=0;$i<@$genome-1;$i++){
-    logmsg "Comparing $$genome[$i]";
-    my $kmerFile1=kmerCountKAnalyze($$genome[$i],$settings);
-    for(my $j=$i+1;$j<@$genome;$j++){
-      my $kmerFile2=kmerCountKAnalyze($$genome[$j],$settings);
-      my $jDist=jDistSortedFile($kmerFile1,$kmerFile2,$settings);
-      print join("\t",@$genome[$i,$j],$jDist)."\n";
-    }
+
+  if($$settings{downsample}){
+    my @genome=downsample([$ref,@$query],$settings);
+    $ref=shift(@genome);
+    $query=\@genome;
   }
+  
+  ...;
+#  for(my $i=0;$i<@$genome-1;$i++){
+#    logmsg "Comparing $$genome[$i]";
+#    my $kmerFile1=kmerCountKAnalyze($$genome[$i],$settings);
+#    for(my $j=$i+1;$j<@$genome;$j++){
+#      my $kmerFile2=kmerCountKAnalyze($$genome[$j],$settings);
+#      my $jDist=jDistSortedFile($kmerFile1,$kmerFile2,$settings);
+#      print join("\t",@$genome[$i,$j],$jDist)."\n";
+#    }
+#  }
 }
 
 # downsample each genome reads file into a temp directory
@@ -105,6 +117,8 @@ sub downsample{
     die "ERROR: problem with CGP run_assembly_removeDuplicateReads.pl" if $?;
     $g=$newG;
   }
+  return @$genome if(wantarray);
+  return $genome;
 }
 
 sub jDistSortedFile{
@@ -347,8 +361,7 @@ sub countSnps{
 
 sub usage{
   "Finds the p-distance between two assemblies using mummer. With more genomes, it creates a table.
-  Usage: $0 assembly.fasta assembly2.fasta [assembly3.fasta ...]
-  -a to note averages. Switching the subject and query can reveal some artifacts in the algorithm.
+  Usage: $0 reference.fasta query1.fasta [query2.fasta ...]
   -q for minimal stdout
   -m method.  Can be the following choices
     Mummer: (default): uses mummer to discover SNPs and counts the total number
@@ -356,7 +369,7 @@ sub usage{
     JaccardKAnalyze: (Same method as 'Jaccard' but uses KAnalyze)
   -c minimum kmer coverage. Default: 2
   -k kmer length. Default: 18
-  -t tempdir Default: tmp
+  -t tempdir If one is not given, then one will be made under /tmp/
   -n numcpus Default: 1
   --downsample 0 Downsample the reads to a frequency, using CG-Pipeline. Useful for removing extraneous data and saving on computation time. Values are between 0 and 1; 0 means no downsampling. 1 will remove duplicate reads only.
   "
