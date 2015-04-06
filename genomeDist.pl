@@ -289,7 +289,9 @@ sub kmerCountJellyfish{
   }
   close TSV;
 
-  unlink $tmpName if($tmpName && -e $tmpName);
+  for($tmpName, $jfDb, $kmerTsv){
+    unlink $_ if($_ && -e $_);
+  }
   return %kmer;
 }
 
