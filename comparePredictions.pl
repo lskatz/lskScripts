@@ -19,7 +19,9 @@ sub main{
 
   my($ref,@query)=@ARGV;
   die usage() if(!$ref || !$query[0]);
-  die "ERROR: I can't find the reference!\n".usage() if(!-e $ref);
+  for($ref,@query){
+    die "ERROR: I can't find $_\n".usage() if(!-e $_);
+  }
 
   # Print the header and then get onto the comparisons
   print join("\t",qw(query genesInCommon commonStartSites exactSame))."\n";
