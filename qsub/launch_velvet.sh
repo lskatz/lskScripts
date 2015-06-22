@@ -25,5 +25,6 @@ if [ "$out" == "" ]; then
   exit 1;
 fi;
 
-$(which perl) $(which VelvetOptimiser.pl) -s 55 -e 99 -d $out -p $out -t $NSLOTS -f "-fastq.gz -shortPaired $reads"
-if [ $? -gt 0 ]; then echo "problem with VelvetOptimiser"; exit 1; fi;
+command="$(which perl) $(which VelvetOptimiser.pl) -s 55 -e 99 -d $out -p $out -t $NSLOTS -f '-fastq.gz -shortPaired $reads'"
+eval $command
+if [ $? -gt 0 ]; then echo "problem with VelvetOptimiser"; echo $command; exit 1; fi;
