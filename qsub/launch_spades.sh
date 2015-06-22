@@ -21,7 +21,7 @@ module load SPAdes/3.1.0
 if [ $? -gt 0 ]; then echo "unable to load spades 3.1.0"; exit 1; fi;
 
 NSLOTS=${NSLOTS:=1}
-spades.py --12 $reads --careful -o $out -t $NSLOTS
+spades.py --12 $reads --careful -o $out -t $NSLOTS 
 if [ $? -gt 0 ]; then echo "problem with spades 3.1.0"; exit 1; fi;
 
 if [ "$fastaOut" != "" ]; then
