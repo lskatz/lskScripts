@@ -22,5 +22,5 @@ if [ "$genome" == "" ]; then
   exit 1;
 fi
 
-command="prokka --prefix $genome --locustag $genome --genus $genus --species $species --strain $genome --force --cpus $NSLOTS $contigs"
+command="prokka --prefix $genome --compliant --locustag $genome --genus $genus --species $species --strain $genome --force --cpus $NSLOTS $contigs"
 eval $command
