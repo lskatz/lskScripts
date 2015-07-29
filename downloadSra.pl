@@ -92,7 +92,9 @@ sub downloadSra{
   # Do not check for errors on prefetch because fastq-dump will work with or without it
 
   logmsg "Converting to fastq format";
-  my $command="fastq-dump -I --split-files -O $$settings{tempdir} -v -v -v -v -v '$acc' 1>&2";
+  # "fastq-dump --defline-seq '$seqIdTemplate' --defline-qual '+' --split-files -O $tmpdir --gzip $F{srarun_acc} "
+  $$settings{seqIdTemplate}||='@$ac_$sn[_$rn]/$ri';
+  my $command="fastq-dump --defline-seq '$$settings{seqIdTemplate}' --defline-qual '+' --split-files -O $$settings{tempdir}  '$acc' 1>&2";
   system($command);
   while($? && $numTries++ < 20){
     logmsg "Command failed! $!\n Command was\n   $command";
@@ -109,10 +111,12 @@ sub downloadSra{
 sub shuffleReads{
   my($fastq,$settings)=@_;
   my $acc=fileparse($$fastq[0],"_1.fastq");
+  system("ls -lhS $$settings{tempdir} 1>&2");
 
   # see if the output is paired end or not.
   # If not, then just return the single end.
-  if(!-f "$acc"."_2.fastq"){
+  if(!-f "$$settings{tempdir}/$acc"."_2.fastq"){
+    logmsg "WARNING: ".$acc."_2.fastq was not found. Returning single-end read set";
     return $$fastq[0];
   }
 
