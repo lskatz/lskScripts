@@ -27,22 +27,23 @@ if [ "$NAME" == "" ]; then
   exit 1;
 fi
 
-echo "Transferring the file to the remote computer from NCBI"
+
+echo `date +'%H:%M:%S'`" Transferring the file to the remote computer from NCBI"
 THREE=${SRR:0:3}
 SIX=${SRR:0:6}
 ssh $RGN_URI "mkdir -p ~/tmp; $RGN_ASCP_PATH $ASCP_XOPTS anonftp@ftp-private.ncbi.nlm.nih.gov:/sra/sra-instant/reads/ByRun/sra/$THREE/$SIX/$SRR/$SRR.sra ~/tmp/$SRR.sra"
 if [ $? -gt 0 ]; then echo "ERROR with ascp on the remote computer!"; exit 1; fi;
 
-echo "Transferring the file back to this computer"
+echo `date +'%H:%M:%S'`" Transferring the file back to this computer"
 rsync --progress -a $RGN_URI:~/tmp/$SRR.sra $OUTDIR/$NAME.sra
 if [ $? -gt 0 ]; then echo "ERROR with transferring the file to here using rsync"; exit 1; fi;
 
-echo "Decompressing the file into fastq.gz - this might take a while";
+echo `date +'%H:%M:%S'` "Decompressing the file into fastq.gz - this might take a while";
 fastq-dump -v --defline-seq '@$ac_$sn[_$rn]/$ri' --defline-qual '+' --split-files -O . --gzip $OUTDIR/$NAME.sra
 if [ $? -gt 0 ]; then echo "ERROR with fastq-dump"; exit 1; fi;
 
 
-echo "Finished. Files will be found in $OUTDIR";
+echo `date +'%H:%M:%S'`" Finished. Files will be found in $OUTDIR";
 
 exit 0;
 
