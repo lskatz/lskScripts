@@ -49,12 +49,8 @@ KRAKENTAXONOMY="$TEMPDIR/kraken.taxonomy";
 
 logmsg "tempdir is $TEMPDIR\n  kraken dir is $KRAKENDIR\n  krona dir is $KRONADIR";
 
-# Run the Kraken to Krona pipeline but don't exit, 
-# so that TEMPDIR can be deleted each time.
-
 run $KRAKENDIR/kraken --fastq-input --paired --db=$KRAKEN_DEFAULT_DB --preload --gzip-compressed --quick --threads $NSLOTS --output $KRAKENOUT $READS
 
-# kraken-translate --db $KRAKEN_DEFAULT_DB --mpa-format $KRAKENOUT > translate
 run kraken-translate --db $KRAKEN_DEFAULT_DB $KRAKENOUT | cut -f 2- | sort | uniq -c |\
   perl -lane '
               s/^ +//;   # remove leading spaces
@@ -63,10 +59,6 @@ run kraken-translate --db $KRAKEN_DEFAULT_DB $KRAKENOUT | cut -f 2- | sort | uni
               print;
              ' |\
   sort -k1,1nr > $KRAKENTAXONOMY
-
-# $KRAKENDIR/kraken-report --db $KRAKEN_DEFAULT_DB --show-zeros $KRAKENOUT> $KRAKENTAXONOMY.withzeros 2>/dev/null &
-#run $KRAKENDIR/kraken-report --db $KRAKEN_DEFAULT_DB $KRAKENOUT> $KRAKENTAXONOMY
-#logmsg "There are " $(wc -l $KRAKENTAXONOMY) " lines in the taxonomy file"
 
 run $KRONADIR/ktImportText -o $HTML $KRAKENTAXONOMY
 
