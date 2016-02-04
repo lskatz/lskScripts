@@ -18,8 +18,6 @@ qsub -q all.q -N snp-pipeline -o $TMP/log -j y -pe smp 12,16 -hard -l exclusive=
   -v "CTRL_FILE=$CTRL_FILE" -v "REF=$REF" <<- "END_OF_SCRIPT"
   #!/bin/bash
 
-  set -e
-
   module load bowtie2/2.1.0
   module load varscan/2.3.7
   export PATH=~/.local/bin:$PATH # make sure snp-pipeline is prioritized
