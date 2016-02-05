@@ -24,10 +24,8 @@ qsub -q all.q -N LyveSetShuffled -o $TMP/log -j y -pe smp 3-4 -V -cwd -t 1-$(cat
   -v "CTRL_FILE=$CTRL_FILE" -v "REF=$REF" <<- "END_OF_SCRIPT"
   #!/bin/bash
 
-  set -e
-
   base_dir=$(sed -n ${SGE_TASK_ID}p $CTRL_FILE)
-  echo "Working on $base_dir"
+  echo "Working on $base_dir with reference file $REF"
   mkdir -p /scratch/$USER
   if [ -e "$base_dir/Lyve-SET" ]; then
     echo "Found $base_dir/Lyve-SET! Will not continue.";
@@ -43,6 +41,7 @@ qsub -q all.q -N LyveSetShuffled -o $TMP/log -j y -pe smp 3-4 -V -cwd -t 1-$(cat
   ln -sv $(find $(realpath $base_dir) -name '*.f*q.gz') $scratch_out/reads/
   if [ $? -gt 0 ]; then exit 1; fi;
   launch_set.pl --noqsub --numcpus $NSLOTS --read_cleaner CGP --mask-phages --mask-cliffs $scratch_out
+  if [ $? -gt 0 ]; then exit 1; fi;
 
   rm -rvf $scratch_out/{reads,bam,tmp}/* # no need to take up all this space
   mv -v $scratch_out $base_dir/Lyve-SET
