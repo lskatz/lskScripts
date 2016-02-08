@@ -15,16 +15,13 @@ spec = matrix(c(
   'tree2'  , '2', 1, "character", 'The second tree'
 ), byrow=TRUE, ncol=5);
 opt = getopt(spec);
-#stop("STOP")
-
-# Concatenate the trees and then lead them
-stop("STOP")
 
 
 ## Get a list of all Newick files in the directory
-treefiles <- list.files(path = "LeeTesting", 
-                        all.files = FALSE,
-                        full.names = FALSE)
+#treefiles <- list.files(path = "LeeTesting", 
+#                        all.files = FALSE,
+#                        full.names = FALSE)
+treefiles <- c(opt$tree1, opt$tree2)
 ntrees <- length(treefiles)
 
 ## Loop over files and import as multiphylo object
@@ -33,7 +30,7 @@ class(mytrees) <- "multiphylo"
 for(f in 1:ntrees) {
   ### This is actually reading the tree file, doing a midpoint root, 
   ### and storing it as a list in one slot of the vector.
-  mytrees[f] <- list(midpoint(read.tree(file = paste("LeeTesting/", treefiles[f], sep = ""))))
+  mytrees[f] <- list(midpoint(read.tree(file = treefiles[f])))
 }
 
 ## Cleaning up the tip labels on the second tree because they don't match the first. 
@@ -44,8 +41,8 @@ for(t in 1:length(mytrees[[2]]$tip.label)) {
 mytrees <- .compressTipLabel(mytrees)
 
 # Calculating the Kendall pairwise distance
-lambdas <- c(0, 0.5, 0.7, 1.0)
-for(x in 1:4) {
-  print(paste("lambda = ", lambdas[x]))
-  print(multiDist(mytrees, lambda = lambdas[x]))
+lambdas <- c(0, 0.5, 1.0)
+for(x in 1:length(lambdas)){
+  dist=multiDist(mytrees, lambda = lambdas[x])
+  print(paste(c(lambdas[x],dist), sep="\t"));
 }
