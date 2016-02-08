@@ -4,6 +4,8 @@
 # Credit to Jo Williams for showing me this metric and getting me going
 # in Rscript
 
+#options(error=traceback) 
+
 # Libraries
 library(stringr)
 library(treescape)
@@ -13,19 +15,21 @@ library(getopt)
 # Import data
 # Column  3: Argument mask  of  the flag , an integer
 # Possible  values:  0=no argument, 1=required argument, 2=optional argument.
-spec = matrix(c(
-  'help'   , 'h', 0, "logical",   'A call for help',
-  'tree1'  , '1', 1, "character", 'The first tree',
-  'tree2'  , '2', 1, "character", 'The second tree'
-), byrow=TRUE, ncol=5);
-opt = getopt(spec);
-
+#spec = matrix(c(
+#  'help'   , 'h', 0, "logical",   'A call for help',
+#  'tree1'  , '1', 1, "character", 'The first tree',
+#  'tree2'  , '2', 1, "character", 'The second tree'
+#), byrow=TRUE, ncol=5);
+#opt = getopt(spec);
 
 ## Get a list of all Newick files in the directory
 #treefiles <- list.files(path = "LeeTesting", 
 #                        all.files = FALSE,
 #                        full.names = FALSE)
-treefiles <- c(opt$tree1, opt$tree2)
+
+treefiles <- commandArgs(trailingOnly=TRUE);
+
+#treefiles <- c(opt$tree1, opt$tree2)
 ntrees <- length(treefiles)
 
 ## Loop over files and import as multiphylo object
@@ -46,7 +50,15 @@ mytrees <- .compressTipLabel(mytrees)
 
 # Calculating the Kendall pairwise distance
 lambdas <- c(0, 0.5, 1.0)
-for(x in 1:length(lambdas)){
-  dist=multiDist(mytrees, lambda = lambdas[x])
-  print(paste(c(lambdas[x],dist), sep="\t"));
+for(t in 1:length(mytrees)){
+
+  for(u in (t+1):length(mytrees)){
+    treeVector=c(mytrees[t],mytrees[u]);
+    print(paste(treefiles[t],treefiles[u]))
+    for(x in 1:length(lambdas)){
+      dist=multiDist(treeVector, lambda = lambdas[x])
+      print(paste(c(lambdas[x],dist), sep="\t"));
+    }
+
+  }
 }
