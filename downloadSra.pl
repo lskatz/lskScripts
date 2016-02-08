@@ -56,7 +56,7 @@ sub main{
 
 sub checkForEdirect{
   for my $exec(qw(esearch efetch xtract fastq-dump prefetch run_assembly_shuffleReads.pl cat)){
-    system("which $exec ");
+    system("which $exec 2>/dev/null");
     die "ERROR: could not find $exec in your PATH" if $?;
   }
   return 1;
