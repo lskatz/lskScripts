@@ -7,10 +7,14 @@
 #options(error=traceback) 
 
 # Libraries
-library(stringr)
-library(treescape)
-library(phangorn)
-library(getopt)
+library(stringr,quietly=TRUE)
+library(treescape,quietly=TRUE)
+library(phangorn,quietly=TRUE)
+library(getopt,quietly=TRUE)
+
+# Script options
+# Which values of lambda to calculate with? Values can be 0 to 1.
+lambdas <- c(0, 1)
 
 # Import data
 # Column  3: Argument mask  of  the flag , an integer
@@ -48,16 +52,21 @@ for(t in 1:length(mytrees[[2]]$tip.label)) {
 }
 mytrees <- .compressTipLabel(mytrees)
 
+# Headers
+cat(paste("Tree1","Tree2","lambda","Kendall","\n",sep="\t"))
+
 # Calculating the Kendall pairwise distance
-lambdas <- c(0, 0.5, 1.0)
-for(t in 1:length(mytrees)){
+for(t in 1:(length(mytrees)-1)){
 
   for(u in (t+1):length(mytrees)){
+
+    # List of tree files from which to calculate
     treeVector=c(mytrees[t],mytrees[u]);
-    print(paste(treefiles[t],treefiles[u]))
+
+    # Calculate Kendall metric
     for(x in 1:length(lambdas)){
       dist=multiDist(treeVector, lambda = lambdas[x])
-      print(paste(c(lambdas[x],dist), sep="\t"));
+      cat(paste(treefiles[t],treefiles[u],lambdas[x],dist,"\n", sep="\t"));
     }
 
   }
