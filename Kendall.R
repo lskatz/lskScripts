@@ -136,7 +136,7 @@ for(t in 1:(length(mytrees)-1)){
 
       # Figure out the stats
       z <- (backgroundMean - dist)/backgroundSd
-      pvalue <- pnorm(z)
+      pvalue <- 2 * pnorm(z)
 
       # Generate output
       distributionString=paste(round(backgroundMean,digits=2),"±",round(backgroundSd,digits=2),sep="")
