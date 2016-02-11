@@ -1,4 +1,4 @@
-#!/bin/env Rscript
+#!/usr/bin/env Rscript
 # Calculates the Kendall metric on 2+ trees
 
 # Credit to Jo Williams for showing me this metric and getting me going
