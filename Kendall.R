@@ -10,12 +10,42 @@
 library(stringr,quietly=TRUE)
 library(treescape,quietly=TRUE)
 library(phangorn,quietly=TRUE)
-library(getopt,quietly=TRUE)
+library(docopt,quietly=TRUE)
+
+# Get pristine ARGV
+#argv <- commandArgs(trailingOnly=FALSE);
+#thisScript = substring(argv[grep("--file=", argv)], 8)
+
+# Get command line parameters
+doc <- "Description: This script uses the Kendall-Colijn phylogeny metric to determine the distance between two rooted trees.  See: Kendall and Colijn 2015, Arxiv
+
+Usage: Kendall.R [--lambda...] [options] TREE TREE... 
+
+All results are printed to stdout.
+
+  Options:
+    -h --help        Show this screen
+    --seed           A seed for randomly generating a background distribution of trees
+    --rep=<int>      Number of replicates [default: 1000]
+
+  Examples:
+    Kendall.R --rep 1000 trees/*.dnd | column -t
+    Kendall.R trees/*.dnd | sort -k8,8n | column -t
+    Kendall.R --lambda 0 --lambda 1 trees/*.dnd
+
+"
+    #--lambda=<float> A lambda value to use in the metric. Multiple lambdas are allowed. [default: 0, 1]
+opts <- docopt(doc)
+
+#treefiles <- commandArgs(trailingOnly=TRUE);
+
+treefiles <- opts$TREE
+  
 
 # Script options
 # Which values of lambda to calculate with? Values can be 0 to 1.
 lambdas <- c(0, 1)
-reps    <- 1000    # number of repetitions for background
+reps    <- opts$rep
 
 
 ########################
@@ -60,25 +90,6 @@ kendallBackground <- function(treeObj, lambdaCoefficient, rep=1000){
 }
 ## END Functions
 ####################
-
-
-# Import data
-# Column  3: Argument mask  of  the flag , an integer
-# Possible  values:  0=no argument, 1=required argument, 2=optional argument.
-#spec = matrix(c(
-#  'help'   , 'h', 0, "logical",   'A call for help',
-#  'tree1'  , '1', 1, "character", 'The first tree',
-#  'tree2'  , '2', 1, "character", 'The second tree'
-#), byrow=TRUE, ncol=5);
-#opt = getopt(spec);
-
-## Get a list of all Newick files in the directory
-#treefiles <- list.files(path = "LeeTesting", 
-#                        all.files = FALSE,
-#                        full.names = FALSE)
-opt=c()
-
-treefiles <- commandArgs(trailingOnly=TRUE);
 
 #treefiles <- c(opt$tree1, opt$tree2)
 ntrees <- length(treefiles)
