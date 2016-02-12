@@ -25,12 +25,16 @@ All results are printed to stdout.
 
   Options:
     -h --help        Show this screen
-    --rep=<i>        Number of replicates [default: 1000]
     --lambda=<f>     A lambda value to use in the metric. [Default: 0.5]
                      0 gives weight to a topology metric; 1 gives weight to branch lengths.
                      Must be between 0 and 1.
     --background     Create a background distribution and generate a p-value
+    --rep=<i>        Number of replicates in the background distribution [Default: 1000]
+                     Implies --background
     --seed=<i>       A seed for randomly generating a background distribution of trees [Default: -1]
+                     Implies --background
+    --plot           Generate a plot of the background distribution of Kendall vs observed value.
+                     Implies --background
 
   Examples:
     Kendall.R --rep 1000 trees/*.dnd | column -t
@@ -48,13 +52,25 @@ reps    <- opts$rep
 if(opts$seed >= 0){
   set.seed(opts$seed)
 }
+# Set background distribution if anything needs it
+if(opts$plot || opts$seed || opts$rep > 0){
+  opts$background=TRUE;
+}
 
+# Parameter checking
 if(lambda < 0 || lambda > 1){
   stop("ERROR: lambda must be between 0 and 1")
+}
+if(reps < 1){
+  stop("ERROR: number of reps must be > 0")
 }
 
 ########################
 # START Functions
+logmsg <- function(msg){
+  cat(paste(c("Kendall.R:",msg),sep=""),"\n", file=stderr())
+}
+
 kendallBackground <- function(treeObj, lambdaCoefficient, rep=1000){
   # Figure out taxa
   taxa=treeObj$tip.label
@@ -93,6 +109,20 @@ kendallBackground <- function(treeObj, lambdaCoefficient, rep=1000){
   kendallVec
   #return(kendallVec)
 }
+
+plotBackground <- function(distribution, observed){
+  library(ggplot2,quietly=TRUE)
+
+  my_example <- rnorm(n=1000, m=24.2, sd=2.2)
+
+  dat <- data.frame(replicate=c(1:length(distribution)), Kendall=distribution)
+
+  binwidth <- (max(distribution)-min(distribution))/100
+  my_histogram <- ggplot(data=dat, aes(x = Kendall)) +
+                  geom_histogram(binwidth=binwidth) +
+                  geom_vline(xintercept = observed)
+  return(my_histogram)
+}
 ## END Functions
 ####################
 
@@ -124,7 +154,9 @@ if(opts$background){
 cat(paste(header,sep="\t"),"\n")
 
 # Calculating the Kendall pairwise distance
+histogram=c() # saving histogram plots in case I want them later
 for(t in 1:(length(mytrees)-1)){
+  logmsg(c("Kendal distances for",treefiles[t]))
   
   # Get the background of Kendall distributions
   if(opts$background){
@@ -140,6 +172,7 @@ for(t in 1:(length(mytrees)-1)){
 
     # Calculate Kendall metric
     dist=multiDist(treeVector, lambda = lambda)
+    dist=dist[1]
 
     # Generate output
     rowVector=c(treefiles[t],treefiles[u],lambda,round(dist,digits=2))
@@ -157,10 +190,21 @@ for(t in 1:(length(mytrees)-1)){
 
       # Add onto the output vector
       rowVector=append(rowVector,c(distributionString,reps,zString,pvalueString))
+      
     }
 
     # Print the output
     cat(paste(rowVector,sep="\t"),"\n");
+
+    if(opts$plot){
+      outfile=paste(t,"_",u,".bmp",sep="")
+      my_histogram=append(histogram,plotBackground(background,dist))
+      logmsg(c("Printing to file",outfile))
+      suppressMessages(
+        ggsave(filename=outfile)
+      )
+    }
   }
 }
+#print(histogram)
 
