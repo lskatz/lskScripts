@@ -19,14 +19,18 @@ library(docopt,quietly=TRUE)
 # Get command line parameters
 doc <- "Description: This script uses the Kendall-Colijn phylogeny metric to determine the distance between two rooted trees.  See: Kendall and Colijn 2015, Arxiv
 
-Usage: Kendall.R [--lambda...] [options] TREE TREE... 
+Usage: Kendall.R [--lambda=f] [options] TREE TREE... 
 
 All results are printed to stdout.
 
   Options:
     -h --help        Show this screen
-    --seed           A seed for randomly generating a background distribution of trees
-    --rep=<int>      Number of replicates [default: 1000]
+    --rep=<i>        Number of replicates [default: 1000]
+    --lambda=<f>     A lambda value to use in the metric. [Default: 0.5]
+                     0 gives weight to a topology metric; 1 gives weight to branch lengths.
+                     Must be between 0 and 1.
+    --background     Create a background distribution and generate a p-value
+    --seed=<i>       A seed for randomly generating a background distribution of trees [Default: -1]
 
   Examples:
     Kendall.R --rep 1000 trees/*.dnd | column -t
@@ -34,19 +38,20 @@ All results are printed to stdout.
     Kendall.R --lambda 0 --lambda 1 trees/*.dnd
 
 "
-    #--lambda=<float> A lambda value to use in the metric. Multiple lambdas are allowed. [default: 0, 1]
-opts <- docopt(doc)
-
-#treefiles <- commandArgs(trailingOnly=TRUE);
-
-treefiles <- opts$TREE
-  
 
 # Script options
+opts <- docopt(doc)
+treefiles <- opts$TREE
 # Which values of lambda to calculate with? Values can be 0 to 1.
-lambdas <- c(0, 1)
+lambda <- as.double(opts$lambda)
 reps    <- opts$rep
+if(opts$seed >= 0){
+  set.seed(opts$seed)
+}
 
+if(lambda < 0 || lambda > 1){
+  stop("ERROR: lambda must be between 0 and 1")
+}
 
 ########################
 # START Functions
@@ -113,20 +118,19 @@ mytrees <- .compressTipLabel(mytrees)
 
 # Headers
 header=c("Tree1","Tree2","lambda","Kendall");
-#if(match('backgroundDistribution', opt) > 0){
+if(opts$background){
   header=append(header,c("BackgroundKendall","n","Z","p-value"));
-#}
+}
 cat(paste(header,sep="\t"),"\n")
 
 # Calculating the Kendall pairwise distance
 for(t in 1:(length(mytrees)-1)){
   
-  # Get the background of Kendall distributions with lambda==0 and lambda==1
-  # The key will be 'lambda0', 'lambda0.5', etc
-  background=list()
-  for(x in 1:length(lambdas)){
-    key <- paste("lambda",lambdas[x],sep="")
-    background[[key]]=kendallBackground(mytrees[[t]],lambdas[x],rep=reps)
+  # Get the background of Kendall distributions
+  if(opts$background){
+    background=kendallBackground(mytrees[[t]],lambda,rep=reps)
+    backgroundMean=mean(background)
+    backgroundSd = sd(background)
   }
 
   for(u in (t+1):length(mytrees)){
@@ -135,28 +139,28 @@ for(t in 1:(length(mytrees)-1)){
     treeVector=c(mytrees[t],mytrees[u]);
 
     # Calculate Kendall metric
-    for(x in 1:length(lambdas)){
-      # background distribution
-      lambdakey=paste("lambda",lambdas[x],sep="")
-      # Convert list to vector, and then call 'mean'
-      backgroundMean=mean(unlist(background[[lambdakey]]))
-      backgroundSd = sd(unlist(background[[lambdakey]]))
+    dist=multiDist(treeVector, lambda = lambda)
 
-      # Get the actual distance
-      dist=multiDist(treeVector, lambda = lambdas[x])
+    # Generate output
+    rowVector=c(treefiles[t],treefiles[u],lambda,round(dist,digits=2))
 
-      # Figure out the stats
+    # background distribution
+    if(opts$background){
+      # Calculate Z and P
       z <- (backgroundMean - dist)/backgroundSd
       pvalue <- 2 * pnorm(z)
 
-      # Generate output
+      # Formatting for output
       distributionString=paste(round(backgroundMean,digits=2),"±",round(backgroundSd,digits=2),sep="")
       pvalueString=round(pvalue,digits=6)
       zString=round(z,digits=2)
-      rowVector=c(treefiles[t],treefiles[u],lambdas[x],round(dist,digits=2),distributionString,reps,zString,pvalueString);
-      cat(paste(rowVector,sep="\t"),"\n");
+
+      # Add onto the output vector
+      rowVector=append(rowVector,c(distributionString,reps,zString,pvalueString))
     }
 
+    # Print the output
+    cat(paste(rowVector,sep="\t"),"\n");
   }
 }
 
