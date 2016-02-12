@@ -71,12 +71,12 @@ logmsg <- function(msg){
   cat(paste(c("Kendall.R:",msg),sep=""),"\n", file=stderr())
 }
 
-kendallBackground <- function(treeObj, lambdaCoefficient, rep=1000){
+kendallBackground <- function(treeObj, treeObj2, lambdaCoefficient, rep=1000){
   # Figure out taxa
   taxa=treeObj$tip.label
   numTaxa=length(taxa)
   # Figure out max and min branch lengths for br=
-  branchLength=sort(treeObj$edge.length)
+  branchLength=sort(c(treeObj$edge.length,treeObj2$edge.length))
   minLength=branchLength[1]
   maxLength=branchLength[length(branchLength)]
 
@@ -158,14 +158,14 @@ histogram=c() # saving histogram plots in case I want them later
 for(t in 1:(length(mytrees)-1)){
   logmsg(c("Kendal distances for",treefiles[t]))
   
-  # Get the background of Kendall distributions
-  if(opts$background){
-    background=kendallBackground(mytrees[[t]],lambda,rep=reps)
-    backgroundMean=mean(background)
-    backgroundSd = sd(background)
-  }
-
   for(u in (t+1):length(mytrees)){
+
+    # Get the background of Kendall distributions
+    if(opts$background){
+      background=kendallBackground(mytrees[[t]],mytrees[[u]],lambda,rep=reps)
+      backgroundMean=mean(background)
+      backgroundSd = sd(background)
+    }
 
     # List of tree files from which to calculate
     treeVector=c(mytrees[t],mytrees[u]);
