@@ -53,12 +53,12 @@ if(opts$seed >= 0){
   set.seed(opts$seed)
 }
 # Set background distribution if anything needs it
-if(opts$plot || opts$seed || opts$rep > 0){
+if(opts$plot | opts$seed > 0 | opts$rep > 0){
   opts$background=TRUE;
 }
 
 # Parameter checking
-if(lambda < 0 || lambda > 1){
+if(lambda < 0 | lambda > 1){
   stop("ERROR: lambda must be between 0 and 1")
 }
 if(reps < 1){
@@ -180,8 +180,8 @@ for(t in 1:(length(mytrees)-1)){
     # background distribution
     if(opts$background){
       # Calculate Z and P
-      z <- (backgroundMean - dist)/backgroundSd
-      pvalue <- 2 * pnorm(z)
+      z <- (backgroundMean - dist)/backgroundSd # Want to know whether the background is bigger than observed
+      pvalue <- pnorm(z)
 
       # Formatting for output
       distributionString=paste(round(backgroundMean,digits=2),"±",round(backgroundSd,digits=2),sep="")
