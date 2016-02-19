@@ -38,7 +38,7 @@ qsub -q all.q -N LyveSetShuffled -o $TMP/log -j y -pe smp 3-4 -V -cwd -t 1-$(cat
   set_manage.pl --create $scratch_out
   rmdir $scratch_out/reference;
   cp -r $REF $scratch_out/reference
-  ln -sv $(find $(realpath $base_dir) -name '*.f*q.gz') $scratch_out/reads/
+  ln -sv $(find $(realpath $base_dir)/reads -name '*.f*q.gz') $scratch_out/reads/
   if [ $? -gt 0 ]; then exit 1; fi;
   launch_set.pl --noqsub --numcpus $NSLOTS --read_cleaner CGP --mask-phages --mask-cliffs $scratch_out
   if [ $? -gt 0 ]; then exit 1; fi;
