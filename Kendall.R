@@ -135,6 +135,7 @@ class(mytrees) <- "multiphylo"
 for(f in 1:ntrees) {
   ### This is actually reading the tree file, doing a midpoint root, 
   ### and storing it as a list in one slot of the vector.
+  logmsg(c("Reading",treefiles[f]));
   mytrees[f] <- list(midpoint(read.tree(file = treefiles[f])))
 }
 
