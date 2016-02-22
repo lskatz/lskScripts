@@ -24,6 +24,8 @@ sub main{
   die "ERROR: need to remove at least taxon\n".usage() if(@remove < 1);
 
   safeRemove($$settings{tree},\@remove,$settings);
+
+  return 0;
 }
 
 sub safeRemove{
