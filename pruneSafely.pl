@@ -9,7 +9,7 @@ use Getopt::Long;
 use Data::Dumper;
 use File::Basename qw/basename/;
 
-sub logmsg{print STDERR "@_\n";}
+sub logmsg{local $0=basename($0); print STDERR "$0: @_\n";}
 
 exit main();
 
@@ -23,7 +23,11 @@ sub main{
   my @remove=@ARGV;
   die "ERROR: need to remove at least taxon\n".usage() if(@remove < 1);
 
-  safeRemove($$settings{tree},\@remove,$settings);
+  my $treeObj=safeRemove($$settings{tree},\@remove,$settings);
+
+  my $out=Bio::TreeIO->new(-format=>"newick");
+  $out->write_tree($treeObj);
+  print "\n"; # just because newick files don't have newlines for some reason
 
   return 0;
 }
@@ -33,10 +37,10 @@ sub safeRemove{
 
   my $treeObj=Bio::TreeIO->new(-file=>$tree)->next_tree;
 
-  removeTaxa($treeObj,$remove,$settings);
-  removeSingletons($treeObj,$remove,$settings);
-
-  die;
+  $treeObj=removeTaxa($treeObj,$remove,$settings);
+  $treeObj=removeSingletons($treeObj,$settings);
+  
+  return $treeObj;
 }
 
 sub removeTaxa{
@@ -48,26 +52,19 @@ sub removeTaxa{
 
   for my $taxon(@$remove){
     die "ERROR: taxon $taxon does not exist in the tree!" if(!$taxaInTree{$taxon});
-    $tree->remove_Node($taxon);
+    my $bool=$tree->remove_Node($taxon);
   }
+
+  return $tree;
 }
 
+# This is actually the contract_linear_paths function
 sub removeSingletons{
-  my($tree,$remove,$settings)=@_;
+  my($tree,$settings)=@_;
 
-  # A singleton is a node whose direct ancestor only has one child node.
-  # Therefore for each leaf, find its direct ancestor and see if
-  # it only has one child.  If so, I need to perform a splice.
-  my @taxaInTree=$tree->get_leaf_nodes;
-  for my $taxon(@taxaInTree){
-    my $parentNode=$taxon->ancestor();
-    my @siblingNode=$parentNode->get_all_Descendents();
-    next if(@siblingNode > 1);
+  $tree->contract_linear_paths(1);
 
-    # At this point, the node is an only child and so its parent
-    # has to be spliced.
-    $tree->splice(-remove=>[$parentNode],-preserve_lengths=>1);
-  }
+  return $tree;
 }
 
 sub usage{
