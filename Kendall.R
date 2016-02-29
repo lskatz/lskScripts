@@ -88,17 +88,15 @@ kendallBackground <- function(treeObj, treeObj2, lambdaCoefficient, rep=1000){
   class(mytrees) <- "multiphylo"
   mytrees[[1]]=treeObj
 
-  # make a function for choosing random branch lengths for the 
-  # rtree() function
-  randBranchLength <- function(v){
-    return(v[round(runif(1,1,length(v)))])
-  }
-
   # Start recording the kendal metric in a vector.
   # It can be averaged out later.
   kendallVec=c()
   for(i in 1:rep){
-    mytrees[[2]] <- rtree(numTaxa,rooted=TRUE, tip.label=taxa, br=randBranchLength(branchLength))
+    # Generate random branch lengths without replacement
+    randBranchLength=sample(branchLength, replace=FALSE);
+
+    # Generate a random tree with random taxa and branch lengths
+    mytrees[[2]] <- rtree(numTaxa,rooted=TRUE, tip.label=taxa, randBranchLength)
     mytrees <- .compressTipLabel(mytrees)
 
     # Find the Kendall metric between this random tree and the 
