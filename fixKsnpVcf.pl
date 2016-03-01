@@ -44,11 +44,12 @@ sub findPosition{
   my($kmerRegex,$seqHash,$settings)=@_;
 
   my $dotIndex=index($kmerRegex,'.');
+  my $revcom=revcom($kmerRegex)->seq;
   my @ID=keys(%$seqHash);
 
   for my $id(@ID){
     my $seq=$$seqHash{$id};
-    if($seq=~/($kmerRegex)/i){
+    if($seq=~/($kmerRegex|$revcom)/i){
       my $pos=length($`)+$dotIndex;
       return ($id,$pos);
     }
@@ -58,9 +59,18 @@ sub findPosition{
   return (undef,undef);
 }
 
+#sub revcom{
+#  my($dna,$settings)=@_;
+#  my $rev=reverse($dna);
+#  $rev=~tr/ACGTacgt/TGCAtgca/;
+#  return $rev
+#}
+
 sub usage{
   "Usage: $0 -ref reference.fasta < file.vcf > fixed.vcf
   --only-positional  Removes any position whose kmer is not found
-                     in the reference fasta
+                     in the reference fasta. However, this is 
+                     just a sanity check. All kmers should be
+                     found in the reference fasta.
   "
 }
