@@ -10,7 +10,7 @@ exit main();
 
 sub main{
   my $settings={};
-  GetOptions($settings,qw(ref|reference=s help)) or die $!;
+  GetOptions($settings,qw(ref|reference=s only-positional help)) or die $!;
   die usage() if($$settings{help} || !$$settings{ref});
 
   my %seq;
@@ -31,6 +31,8 @@ sub main{
       if($contig && $pos){
         $F[0]=$contig;
         $F[1]=$pos;
+      } elsif($$settings{'only-positional'}){
+        next;
       }
     }
 
@@ -53,9 +55,12 @@ sub findPosition{
   }
 
   logmsg "ERROR: I could not find kmer $kmerRegex in $$settings{ref}";
+  return (undef,undef);
 }
 
 sub usage{
   "Usage: $0 -ref reference.fasta < file.vcf > fixed.vcf
+  --only-positional  Removes any position whose kmer is not found
+                     in the reference fasta
   "
 }

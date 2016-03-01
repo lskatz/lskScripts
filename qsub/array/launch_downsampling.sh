@@ -39,11 +39,13 @@ qsub -q all.q -N downsample -o $TMP/log -j y -pe smp 1 -V -cwd -t 1-$(cat $CTRL_
   # The global temporary directory
   tmpdir=/scratch
 
+  echo "Downsampling script will be $(which run_assembly_removeDuplicateReads.pl)"
+
   # What coverage?  Directories?
   fastq=$(sed -n ${SGE_TASK_ID}p $CTRL_FILE | awk '{print $1}')
   b=$(basename $fastq);
   cov=$(sed -n ${SGE_TASK_ID}p $CTRL_FILE | awk '{print $2}')
-  localDir=cov$cov
+  localDir=cov$cov/reads
   scratchDir=$tmpdir/$USER/cov$cov
   mkdir -p $scratchDir $localDir
 

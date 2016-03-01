@@ -15,6 +15,10 @@ fi
 TMP=$(mktemp --tmpdir='.' --directory qsubLyveSET.XXXXXXXX)
 echo "tmp dir is $TMP "
 
+export PATH=/scicomp/groups/OID/NCEZID/DFWED/EDLB/share/bin/lyve-SET-v1.1.4e/scripts:$PATH
+echo -n "Lyve-SET is being launched from ";
+\which launch_set.pl
+
 REF=$1; shift; # get the reference genome and remove it from ARGV
 CTRL_FILE="$TMP/array.txt"
 echo "$@" | tr ' ' '\n' | grep . > $CTRL_FILE
