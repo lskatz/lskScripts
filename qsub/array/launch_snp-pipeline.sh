@@ -34,7 +34,7 @@ qsub -q all.q -N snp-pipeline -o $TMP/log -j y -pe smp 12,16 -hard -l exclusive=
   copy_snppipeline_data.py configurationFile $scratch_out
 
   # Find what reads we're using. Assume all reads have been shuffled.
-  READS=$(find $base_dir $base_dir/reads $base_dir/reads/shuffled -maxdepth 1 -name '*.fastq.gz' 2>/dev/null);
+  READS=$(find $base_dir $base_dir/reads -maxdepth 1 -name '*.fastq.gz' 2>/dev/null);
 
   # Deshuffle reads into the correct directories
   echo $READS | xargs -P $NSLOTS -n 1 sh -c '

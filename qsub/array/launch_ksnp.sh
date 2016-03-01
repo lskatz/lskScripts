@@ -5,6 +5,11 @@
 # Author: Lee Katz
 # Usage: bash $0 readsdir1 [readsdir2 ... readsdirX]
 
+if [ "$1" == "" ]; then
+  echo "Usage: $0 cov1 [cov2...]"
+  exit 1;
+fi
+
 TMP=$(mktemp --tmpdir='.' --directory qsubKsnp3.XXXXXXXX)
 echo "tmp dir is $TMP "
 
