@@ -11,6 +11,7 @@ exit main();
 sub main{
   my $settings={};
   GetOptions($settings,qw(ref|reference=s help)) or die $!;
+  die usage() if($$settings{help} || !$$settings{ref});
 
   my %seq;
   my $in=Bio::SeqIO->new(-file=>$$settings{ref});
@@ -52,4 +53,9 @@ sub findPosition{
   }
 
   logmsg "ERROR: I could not find kmer $kmerRegex in $$settings{ref}";
+}
+
+sub usage{
+  "Usage: $0 -ref reference.fasta < file.vcf > fixed.vcf
+  "
 }
