@@ -4,73 +4,75 @@ use strict;
 use warnings;
 use Bio::Perl;
 use Getopt::Long;
+use Data::Dumper;
+use constant reportEvery=>1000;
 
 sub logmsg{print STDERR "@_\n";}
 exit main();
 
 sub main{
   my $settings={};
-  GetOptions($settings,qw(ref|reference=s only-positional help)) or die $!;
+  GetOptions($settings,qw(ref|reference=s help)) or die $!;
   die usage() if($$settings{help} || !$$settings{ref});
 
   my %seq;
   my $in=Bio::SeqIO->new(-file=>$$settings{ref});
   while(my $seq=$in->next_seq){
-    $seq{$seq->id}=$seq->seq;
+    $seq{$seq->id}=uc($seq->seq);
   }
   
+  my $lineCount=0;
   while(<>){
+    # Print headers
+    if(/^#/){
+      print;
+      next;
+    }
+
+    # Fix VCF lines
+    $lineCount++;
     chomp;
     my @F=split /\t/;
-    $F[1]||='.';
+    $F[1]||=0;
+    $F[2]=uc($F[2]);
 
-    if(/^#/){
-      
-    } else {
-      my($contig,$pos)=findPosition($F[2],\%seq,$settings);
-      if($contig && $pos){
-        $F[0]=$contig;
-        $F[1]=$pos;
-      } elsif($$settings{'only-positional'}){
-        next;
-      }
+    # Fix up the kmer line and print it
+    fixPosition(\@F,\%seq,$settings);
+
+    if($lineCount % reportEvery == 0){
+      logmsg "Fixed $lineCount lines so far";
     }
-
-    print join("\t",@F)."\n";
   }
 }
 
-sub findPosition{
-  my($kmerRegex,$seqHash,$settings)=@_;
+sub fixPosition{
+  my($F,$seqHash,$settings)=@_;
 
-  my $dotIndex=index($kmerRegex,'.');
-  my $revcom=revcom($kmerRegex)->seq;
-  my @ID=keys(%$seqHash);
+  # Remove the old Chrom/pos information from the VCF line.
+  # It's not what we want anyway.
+  splice(@$F,0,2);
 
-  for my $id(@ID){
-    my $seq=$$seqHash{$id};
-    if($seq=~/($kmerRegex|$revcom)/i){
+  # Figure out where the snp is within the kmer to help
+  # with the genomic position later on.
+  my $dotIndex=index($$F[0],'.');
+  # Also need to search with the reverse complement.
+  my $revcom=revcom($$F[0])->seq;
+
+  # Keep track of whether or not there are matches
+  my $numMatches=0;
+  for my $id(keys(%$seqHash)){
+    while($$seqHash{$id}=~/($$F[0]|$revcom)/g){
       my $pos=length($`)+$dotIndex;
-      return ($id,$pos);
+      print join("\t",$id,$pos,@$F)."\n";
+      $numMatches++;
     }
   }
 
-  logmsg "ERROR: I could not find kmer $kmerRegex in $$settings{ref}";
-  return (undef,undef);
+  logmsg "ERROR: I could not find kmer $$F[0] in $$settings{ref}" if($numMatches < 1);
+  return $numMatches;
 }
-
-#sub revcom{
-#  my($dna,$settings)=@_;
-#  my $rev=reverse($dna);
-#  $rev=~tr/ACGTacgt/TGCAtgca/;
-#  return $rev
-#}
 
 sub usage{
-  "Usage: $0 -ref reference.fasta < file.vcf > fixed.vcf
-  --only-positional  Removes any position whose kmer is not found
-                     in the reference fasta. However, this is 
-                     just a sanity check. All kmers should be
-                     found in the reference fasta.
+  "Usage: $0 -ref reference.fasta < ksnp.vcf > fixed.vcf
   "
 }
