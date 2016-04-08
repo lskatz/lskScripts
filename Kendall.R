@@ -1,16 +1,11 @@
 #!/usr/bin/env Rscript
-# Calculates the Kendall metric on 2+ trees
-
-# Credit to Jo Williams for showing me this metric and getting me going
-# in Rscript
-
-#options(error=traceback) 
 
 # Libraries
 library(stringr,quietly=TRUE)
 library(treescape,quietly=TRUE)
 library(phangorn,quietly=TRUE)
 library(docopt,quietly=TRUE)
+library(ips,quietly=TRUE)
 
 # Get pristine ARGV
 #argv <- commandArgs(trailingOnly=FALSE);
@@ -121,6 +116,33 @@ plotBackground <- function(distribution, observed){
                   geom_vline(xintercept = observed)
   return(my_histogram)
 }
+
+readyTreeForComparison <- function(treefile){
+  # Read and make midpoint root
+  my_tmptree <- midpoint(read.tree(file = treefile))
+  # Add 100% confidence where it is null.  However, is it on a 0-1
+  # or a 0-100 scale first?
+  node_labels <- as.numeric(my_tmptree$node.label)
+  if(all(is.na(node_labels))){
+    node_labels=rep(100,my_tmptree$Nnode)
+  }
+  max_bootstrap <- max(node_labels,na.rm=TRUE)
+  node_labels[is.na(node_labels)] <- max_bootstrap
+    
+  my_tmptree$node.label <- as.character(node_labels)
+  # collapse low-confidence nodes
+  my_tmptree <- collapseUnsupportedEdges(my_tmptree, "node.label", 0.7*max_bootstrap)
+  # For whatever reason, collapseUnsupportedEdges adds NA values to the end of the node.label vector.
+  # Removing all NAs should be fine because the preexisting NAs have already been converted.
+  my_tmptree$node.label <- my_tmptree$node.label[!is.na(my_tmptree$node.label)]
+  # Sort polytomies
+  my_tmptree$tip.label <- sort(my_tmptree$tip.label)
+  
+  # Make into a list, to make it compatible with Kendall-Colijn
+  return(list(my_tmptree))
+  
+}
+
 ## END Functions
 ####################
 
@@ -134,18 +156,17 @@ for(f in 1:ntrees) {
   ### This is actually reading the tree file, doing a midpoint root, 
   ### and storing it as a list in one slot of the vector.
   logmsg(c("Reading",treefiles[f]));
-  mytrees[f] <- list(midpoint(read.tree(file = treefiles[f])))
-}
 
-## Cleaning up the tip labels on the second tree because they don't match the first. 
-## Idiosyncratic.
-#for(t in 1:length(mytrees[[2]]$tip.label)) {
-#  mytrees[[2]]$tip.label[t] <- str_split(string = mytrees[[2]]$tip.label[t], pattern = "_")[[1]][1]
-#}
+  #make it compatible with Kendall-Colijn
+  mytrees[f] <- readyTreeForComparison(treefiles[f])
+  
+}
 
 mytrees <- .compressTipLabel(mytrees)
 
-# Headers
+
+
+# Print headers
 header=c("Tree1","Tree2","lambda","Kendall");
 if(opts$background){
   header=append(header,c("BackgroundKendall","n","Z","p-value"));
@@ -156,7 +177,7 @@ cat(paste(header,sep="\t"),"\n")
 histogram=c() # saving histogram plots in case I want them later
 for(t in 1:(length(mytrees)-1)){
   logmsg(c("Kendal distances for",treefiles[t]))
-  
+
   for(u in (t+1):length(mytrees)){
 
     # Get the background of Kendall distributions
