@@ -200,7 +200,7 @@ for(t in 1:(length(mytrees)-1)){
     # background distribution
     if(opts$background){
       # Calculate Z and P
-      z <- (backgroundMean - dist)/backgroundSd # Want to know whether the background is bigger than observed
+      z <- (dist - backgroundMean)/backgroundSd # Want to know whether the background is bigger than observed
       pvalue <- pnorm(z)
 
       # Formatting for output
