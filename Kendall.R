@@ -6,6 +6,12 @@ library(treescape,quietly=TRUE)
 library(phangorn,quietly=TRUE)
 library(docopt,quietly=TRUE)
 library(ips,quietly=TRUE)
+library(ggplot2,quietly=TRUE)
+
+# These libraries are still noisy despite the quietly parameter
+suppressMessages(
+  library(tools, quietly=TRUE)
+)
 
 # Get pristine ARGV
 #argv <- commandArgs(trailingOnly=FALSE);
@@ -104,8 +110,6 @@ kendallBackground <- function(treeObj, treeObj2, lambdaCoefficient, rep=1000){
 }
 
 plotBackground <- function(distribution, observed){
-  library(ggplot2,quietly=TRUE)
-
   my_example <- rnorm(n=1000, m=24.2, sd=2.2)
 
   dat <- data.frame(replicate=c(1:length(distribution)), Kendall=distribution)
@@ -118,8 +122,9 @@ plotBackground <- function(distribution, observed){
 }
 
 readyTreeForComparison <- function(treefile){
-  # Read and make midpoint root
-  my_tmptree <- midpoint(read.tree(file = treefile))
+  # Read tree
+  my_tmptree <- read.tree(file = treefile)
+
   # Add 100% confidence where it is null.  However, is it on a 0-1
   # or a 0-100 scale first?
   node_labels <- as.numeric(my_tmptree$node.label)
@@ -129,14 +134,17 @@ readyTreeForComparison <- function(treefile){
   max_bootstrap <- max(node_labels,na.rm=TRUE)
   node_labels[is.na(node_labels)] <- max_bootstrap
     
+  node_labels=mapply(sprintf,"%0.2f",node_labels)
   my_tmptree$node.label <- as.character(node_labels)
   # collapse low-confidence nodes
   my_tmptree <- collapseUnsupportedEdges(my_tmptree, "node.label", 0.7*max_bootstrap)
   # For whatever reason, collapseUnsupportedEdges adds NA values to the end of the node.label vector.
   # Removing all NAs should be fine because the preexisting NAs have already been converted.
-  my_tmptree$node.label <- my_tmptree$node.label[!is.na(my_tmptree$node.label)]
+  #my_tmptree$node.label <- my_tmptree$node.label[!is.na(my_tmptree$node.label)]
+  # midpoint root
+  my_tmptree <- midpoint(my_tmptree)
   # Sort polytomies
-  my_tmptree$tip.label <- sort(my_tmptree$tip.label)
+  my_tmptree <- reorder(my_tmptree, order="cladewise", index.only=FALSE)
   
   # Make into a list, to make it compatible with Kendall-Colijn
   return(list(my_tmptree))
@@ -153,13 +161,16 @@ ntrees <- length(treefiles)
 mytrees <- vector("list", ntrees)
 class(mytrees) <- "multiphylo"
 for(f in 1:ntrees) {
+  basename <- file_path_sans_ext(basename(treefiles[f]))
+
   ### This is actually reading the tree file, doing a midpoint root, 
   ### and storing it as a list in one slot of the vector.
   logmsg(c("Reading",treefiles[f]));
 
   #make it compatible with Kendall-Colijn
   mytrees[f] <- readyTreeForComparison(treefiles[f])
-  
+
+  write.tree(mytrees[f][[1]], file=paste(basename,".flattened.dnd",sep=""))
 }
 
 mytrees <- .compressTipLabel(mytrees)
@@ -171,7 +182,7 @@ header=c("Tree1","Tree2","lambda","Kendall");
 if(opts$background){
   header=append(header,c("BackgroundKendall","n","Z","p-value"));
 }
-cat(paste(header,sep="\t"),"\n")
+cat(paste(header,sep="\t"),"\n",sep="\t")
 
 # Calculating the Kendall pairwise distance
 histogram=c() # saving histogram plots in case I want them later
@@ -214,7 +225,7 @@ for(t in 1:(length(mytrees)-1)){
     }
 
     # Print the output
-    cat(paste(rowVector,sep="\t"),"\n");
+    cat(paste(rowVector,sep="\t"),"\n",sep="\t");
 
     if(opts$plot){
       outfile=paste(t,"_",u,".bmp",sep="")
