@@ -6,6 +6,7 @@
 use strict;
 use warnings;
 use Getopt::Long;
+use File::Basename qw/basename/;
 
 exit(main());
 sub main{
@@ -28,24 +29,46 @@ sub validate{
   my($settings)=@_;
   # validate the fastq file
   my $i=0;
+  my $readLength=0;
   while(<>){
     $i++;
     my $mod=$i%4;
+
+    # ID line
     if($mod==1){
       if(substr($_,0,1) ne '@'){
         return errorMsg($i,$_,$settings);
       }
-    } elsif($mod==2){
+    } 
+    # seq line
+    elsif($mod==2){
       chomp;
       if($_=~/[^A-Z\.]/i){
         return errorMsg($i,$_,$settings);
       }
-    } elsif($mod==3){
+      $readLength=length($_);
+    } 
+    # plus line
+    elsif($mod==3){
       if(substr($_,0,1) ne '+'){
         return errorMsg($i,$_,$settings);
       }
+    } 
+    # qual line
+    elsif($mod==0){
+      chomp or return errorMsg($i,$_,$settings);
+      # This usually captures incomplete downloads.
+      if($readLength != length($_)){
+        return "Seq length is not the same as qual length ".errorMsg($i,$_,$settings);
+      }
     }
   }
+
+  # Did we get four lines per read?
+  if($i % 4 > 0){
+    return "The last read is incomplete ". errorMsg($i,"The last line",$settings);
+  }
+
   return "";
 }
 
@@ -58,8 +81,10 @@ sub errorMsg{
 }
 
 sub usage{
-  $0=`basename $0`; chomp($0);
-  "Validates the format of a fastq file and returns an appropriate exit code. The fastq file must be in a 4-line-per-read format.
+  $0=basename $0;
+  "Validates the format of a fastq file and returns an appropriate exit code.
+  The fastq file must be in a 4-line-per-read format.
+
   Usage: $0 < reads.fastq
   -h for help
   -v verbose
