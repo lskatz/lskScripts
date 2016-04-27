@@ -68,6 +68,9 @@ sub validate{
   if($i % 4 > 0){
     return "The last read is incomplete ". errorMsg($i,"The last line",$settings);
   }
+  if($i == 0){
+    return "There are zero reads!";
+  }
 
   return "";
 }
