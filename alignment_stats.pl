@@ -3,18 +3,22 @@ use Bio::AlignIO;
 use Data::Dumper;
 use strict;
 use warnings;
+use Getopt::Long;
 
 # globals
 my @header=qw(File no_sequences no_alignments length percentage_identity format snps conserved_sites score);
 
-die "Usage: $0 alignment1.fna alignment2.clw ..." if(@ARGV<1);
-exit(main(\@ARGV));
+exit(main());
 
 sub main{
-  my($file)=@_;
+  my $settings={};
+  GetOptions($settings,qw(help));
+
+  my @file=@ARGV;
+  die usage() if(!@file || $$settings{help});
 
   print join("\t",@header)."\n";
-  foreach my $f (@$file){
+  foreach my $f (@file){
     if(!-f $f){
       print "Error: the file $f does not exist\n";
       next;
@@ -136,3 +140,8 @@ sub dnaMatrix{
   );
   return %matrix;
 } 
+
+sub usage{
+  "Usage: $0 alignment1.fna alignment2.clw ...
+  "
+}
