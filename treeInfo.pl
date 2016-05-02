@@ -21,6 +21,8 @@ sub main{
 
   my @tree=@ARGV;
 
+  die usage() if(!@tree || $$settings{help});
+
   my @header=qw(File numLeaves numNodes);
   push(@header,'confidence') if($$settings{confidence});
   push(@header,'taxa') if($$settings{taxa});
