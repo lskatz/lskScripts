@@ -1,26 +1,28 @@
 #! /usr/bin/env perl
 use Bio::AlignIO;
 use Data::Dumper;
-use Number::Format;
 use strict;
 use warnings;
+
+# globals
+my @header=qw(File no_sequences no_alignments length percentage_identity format snps conserved_sites score);
 
 die "Usage: $0 alignment1.fna alignment2.clw ..." if(@ARGV<1);
 exit(main(\@ARGV));
 
 sub main{
   my($file)=@_;
+
+  print join("\t",@header)."\n";
   foreach my $f (@$file){
     if(!-f $f){
       print "Error: the file $f does not exist\n";
       next;
     }
     my $stats=alignmentStats($f);
-
-    print join("\t",("File",$f))."\n";
-    while(my($stat,$value)=each(%$stats)){
-      print join("\t",($stat,$value));
-      print "\n";
+    for my $h(@header){
+      die "Internal error: $h was not calculated" if(!defined($$stats{$h}));
+      print $$stats{$h}."\t";
     }
     print "\n";
   }
@@ -45,12 +47,10 @@ sub guess_format{
 }
 
 sub alignmentStats{
-  my $numberFormatter=new Number::Format(-thousands_sep=>',',-decimal_point=>'.',decimal_digits=>2);
-
   my ($file)=@_;
   my $format=guess_format($file);
   my $return="";
-  my $defaultStats={"_file"=>$file,"fileSize"=>-s $file,"no_alignments"=>0,format=>$format};
+  my $defaultStats={File=>$file, "_file"=>$file,"fileSize"=>-s $file,"no_alignments"=>0,format=>$format};
   my $stats=\%$defaultStats;
   my $in=Bio::AlignIO->new(-file=>$file,-format=>$format);
   while(my $aln=$in->next_aln){
@@ -58,7 +58,7 @@ sub alignmentStats{
 
     $$stats{no_alignments}++;
     $$stats{length}+=$aln->length;
-    $$stats{is_not_flush}+=bool(!$aln->is_flush); # not flush one time will make it not flush throughout
+
     $$stats{no_sequences}+=$aln->num_sequences;
     $$stats{percentage_identity}+=$aln->percentage_identity;
     $$stats{score}+=score($aln);
@@ -75,14 +75,9 @@ sub alignmentStats{
     $$stats{$_}/=$$stats{no_alignments};
   }
 
-  $$stats{is_flush}=!$$stats{is_not_flush};
-  delete($$stats{is_not_flush});
-
-  # format some numbers to make it easier to look at
-  # TODO make an option to turn this on/off
-  $$stats{fileSize}=$numberFormatter->format_bytes($$stats{fileSize},precision=>2);
-  for(qw(score percentage_identity length)){
-    $$stats{$_}=$numberFormatter->format_number($$stats{$_},2);
+  # round some numbers
+  for (qw(percentage_identity)){
+    $$stats{$_}=sprintf("%0.2f",$$stats{$_});
   }
 
   return $stats;
@@ -107,7 +102,7 @@ sub score{
       my $nt=substr($_,$i,1);
       push(@col,$nt);
     }
-    #$score+=colScore(\@col,\%matrix); #LK this was producing warnings
+    $score+=colScore(\@col,\%matrix);
   }
 
   return $score;
@@ -140,10 +135,4 @@ sub dnaMatrix{
     '-'=>{A=>$g,T=>$g,C=>$g,G=>$g,N=>$g,'-'=>$g},
   );
   return %matrix;
-} 
-  
-sub bool{
-  my $value=shift;
-  return 1 if($value);
-  return 0;
 } 
