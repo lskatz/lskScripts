@@ -19,9 +19,10 @@ exit main();
 
 sub main{
   my $settings={};
-  GetOptions($settings,qw(help numcpus=i genomesize=i)) or die $!;
+  GetOptions($settings,qw(help numcpus=i genomesize=i mindepth=i)) or die $!;
   $$settings{numcpus}||=1;
   $$settings{genomesize}||=5000000;
+  $$settings{mindepth}||=2;
   $$settings{tempdir}||=tempdir("MASHTREE.XXXXXX",CLEANUP=>1,TMPDIR=>1);
   logmsg "Temporary directory will be $$settings{tempdir}";
 
@@ -76,7 +77,7 @@ sub mashSketch{
       logmsg "WARNING: ".basename($fastq)." was already mashed. You need unique filenames for this script. This file will be skipped: $fastq";
       next;
     }
-    system("mash sketch  -k 21 -s 10000 -m 2 -c 10 -g $$settings{genomesize} -o $outPrefix $fastq > /dev/null 2>&1");
+    system("mash sketch -k 21 -s 10000 -m $$settings{mindepth} -c 10 -g $$settings{genomesize} -o $outPrefix $fastq > /dev/null 2>&1");
     die if $?;
   }
 }
@@ -186,6 +187,10 @@ sub distancesToTree{
 sub usage{
   "$0: use distances from Mash (min-hash algorithm) to make a NJ tree
   Usage: $0 *.fastq.gz > tree.dnd
-  --numcpus 1
+  --numcpus      1
+
+  MASH SKETCH OPTIONS
+  --genomesize   5000000
+  --mindepth     2     
   "
 }
