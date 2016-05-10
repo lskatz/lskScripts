@@ -5,8 +5,13 @@ use strict;
 use warnings;
 use Data::Dumper;
 use Getopt::Long;
-use File::Temp qw/tempdir/;
-use File::Basename qw/basename/;
+use List::MoreUtils qw/uniq/;
+use File::Temp qw/tempdir tempfile/;
+use File::Basename qw/basename dirname/;
+use Bio::Tree::DistanceFactory;
+use Bio::Matrix::IO;
+use Bio::Tree::Statistics;
+
 use threads;
 use Thread::Queue;
 
@@ -19,11 +24,12 @@ exit main();
 
 sub main{
   my $settings={};
-  GetOptions($settings,qw(help numcpus=i genomesize=i mindepth=i truncLength=i warn-on-duplicate)) or die $!;
+  GetOptions($settings,qw(help tempdir=s numcpus=i genomesize=i mindepth=i reps=i truncLength=i warn-on-duplicate)) or die $!;
   $$settings{numcpus}||=1;
   $$settings{genomesize}||=5000000;
   $$settings{mindepth}||=2;
-  $$settings{truncLength}||=10;  # how long a genome name is
+  $$settings{truncLength}||=100;  # how long a genome name is
+  $$settings{reps}||=0;
   $$settings{tempdir}||=tempdir("MASHTREE.XXXXXX",CLEANUP=>1,TMPDIR=>1);
   logmsg "Temporary directory will be $$settings{tempdir}";
 
@@ -33,7 +39,7 @@ sub main{
   die usage() if(@reads < 2);
 
   # Check for prereq executables.
-  for my $exe(qw(mash fneighbor)){
+  for my $exe(qw(mash)){
     system("$exe -h > /dev/null 2>&1");
     die "ERROR: could not find $exe in your PATH" if $?;
   }
@@ -42,14 +48,50 @@ sub main{
 
   validateFastq(\@reads,$settings);
 
-  my $mshList=sketchAll(\@reads,$settings);
+  # This step will return an empty array list if there are no reps
+  my $repsDirs=makeBootstrapReads(\@reads,$$settings{reps},$settings);
 
-  my $distances=mashDistance($mshList,$settings);
+  my $primarySketches=sketchAll(\@reads,"$$settings{tempdir}/msh",$settings);
 
-  my $treeContent = distancesToTree($distances,$settings);
+  my @bsSketches;
+  for my $rep(@$repsDirs){
+    my $bsSketches=sketchAll([glob("$rep/*.fastq")],$rep,$settings);
+    push(@bsSketches,$bsSketches);
+  }
+  
 
-  print $treeContent;
+  # Now that the sketches are all done, do the same steps on both
+  # bootstrap samples and the real sample set.
+  my @trees;
+  my @sketches=($primarySketches, @bsSketches);
+  for(my $i=0;$i<@sketches;$i++){
 
+    my $subTempdir="$$settings{tempdir}/rep$i";
+    mkdir $subTempdir;
+
+    my $distances=mashDistance($sketches[$i],$subTempdir,$settings);
+
+    my $phylip = distancesToPhylip($distances,$subTempdir,$settings);
+
+    my $treeObj = createTree($phylip,$subTempdir,$settings);
+
+    push(@trees,$treeObj);
+  }
+
+
+  # Make bootstraps but move the ID to the bootstrap field for
+  # compatibility with Newick and tree drawing programs like MEGA.
+  # TODO: move this to a subroutine to keep main() clean.
+  my $guideTree=shift(@trees);
+  my $stat=Bio::Tree::Statistics->new;
+  my $bs_tree=$stat->assess_bootstrap(\@trees,$guideTree);
+  for my $node(grep { ! $_->is_Leaf } $bs_tree->get_nodes){
+    my $id=$node->bootstrap || 0;
+    $node->id($id);
+  }
+
+  print $bs_tree->as_text('newick');
+  
   return 0;
 }
 
@@ -70,13 +112,62 @@ sub validateFastq{
     $seen{$trunc}=$r;
   }
 
+  # TODO: use validateFastq.pl?  Or is that outside of this 
+  # script's scope?
+
+}
+
+sub makeBootstrapReads{
+  my($reads,$reps,$settings)=@_;
+  return [] if($reps < 1);
+  
+  # Enqueue the reads with a replicate ID
+  my $readsQ=Thread::Queue->new();
+  for(my $i=0;$i<$reps;$i++){
+    for my $r(@$reads){
+      $readsQ->enqueue([$i,$r]);
+    }
+  }
+
+  my @thr;
+  for(0..$$settings{numcpus}-1){
+    $thr[$_]=threads->new(\&subsampleReads, $readsQ, $settings);
+  }
+
+  $readsQ->enqueue(undef) for(@thr);
+  my @reads;
+  for(@thr){
+    my $rList=$_->join;
+    push(@reads,@$rList);
+  }
+
+  my @dir=uniq(map{dirname($_)} @reads);
+  return \@dir;
+}
+
+sub subsampleReads{
+  my($readsQ,$settings)=@_;
+  my @fastqOut;
+  while(defined(my $tmp=$readsQ->dequeue)){
+    my($i,$r)=@$tmp; # replicate identifier, and reads filename
+    logmsg "Subsampling random reads from $r (replicate $i)";
+    my $outdir="$$settings{tempdir}/subsampledReads/$i";
+    system("mkdir -p $outdir");
+    my $outfile="$outdir/".basename($r,@fastqExt).".fastq";
+    if(! -e $outfile){
+      system("run_assembly_removeDuplicateReads.pl --nobin --downsample 0.1 $r > $outfile 2>/dev/null");
+      die "ERROR: problem with run_assembly_removeDuplicateReads.pl: $!" if $?;
+    }
+
+    push(@fastqOut,$outfile);
+  }
+  return \@fastqOut;
 }
 
 # Run mash sketch on everything, multithreaded.
 sub sketchAll{
-  my($reads,$settings)=@_;
+  my($reads,$sketchDir,$settings)=@_;
 
-  my $sketchDir="$$settings{tempdir}/msh";
   mkdir $sketchDir;
 
   my $readsQ=Thread::Queue->new(@$reads);
@@ -87,17 +178,15 @@ sub sketchAll{
   
   $readsQ->enqueue(undef) for(@thr);
 
-  my $mashlist="$$settings{tempdir}/msh.txt";
-  open(MASHLIST,">",$mashlist) or die "ERROR: could not open $mashlist for writing: $!";
+  my @mshList;
   for(@thr){
     my $mashfiles=$_->join;
     for my $file(@$mashfiles){
-      print MASHLIST $file."\n";
+      push(@mshList,$file);
     }
   }
-  close MASHLIST;
 
-  return $mashlist;
+  return \@mshList;
 }
 
 # Individual mash sketch
@@ -110,14 +199,12 @@ sub mashSketch{
     my $outPrefix="$sketchDir/".basename($fastq);
     if(-e "$outPrefix.msh"){
       logmsg "WARNING: ".basename($fastq)." was already mashed. You need unique filenames for this script. This file will be skipped: $fastq";
-      next;
-    }
-    if(-s $fastq < 1){
+    } elsif(-s $fastq < 1){
       logmsg "WARNING: $fastq is a zero byte file. Skipping.";
-      next;
+    } else {
+      system("mash sketch -k 21 -s 10000 -m $$settings{mindepth} -c 10 -g $$settings{genomesize} -o $outPrefix $fastq > /dev/null 2>&1");
+      die if $?;
     }
-    system("mash sketch -k 21 -s 10000 -m $$settings{mindepth} -c 10 -g $$settings{genomesize} -o $outPrefix $fastq > /dev/null 2>&1");
-    die if $?;
 
     push(@msh,"$outPrefix.msh");
   }
@@ -127,24 +214,24 @@ sub mashSketch{
 
 # Parallelized mash distance
 sub mashDistance{
-  my($mshList,$settings)=@_;
+  my($mshList,$outdir,$settings)=@_;
 
-  open(MASHLIST,"<",$mshList) or die "ERROR: could not open $mshList for reading: $!";
-  my @msh=<MASHLIST>; chomp(@msh);
-  close MASHLIST;
+  # Make a temporary file with one line per mash file.
+  # Helps with not running into the max number of command line args.
+  my $mshListFilename="$outdir/mshList.txt";
+  open(my $mshListFh,">",$mshListFilename) or die "ERROR: could not write to $mshListFilename: $!";
+  print $mshListFh $_."\n" for(@$mshList);
+  close $mshListFh;
 
-  my $outdir="$$settings{tempdir}/dist";
-  mkdir($outdir);
-
-  my $mshQueue=Thread::Queue->new(@msh);
+  my $mshQueue=Thread::Queue->new(@$mshList);
   my @thr;
   for(0..$$settings{numcpus}-1){
-    $thr[$_]=threads->new(\&mashDist,$outdir,$mshQueue,$mshList,$settings);
+    $thr[$_]=threads->new(\&mashDist,$outdir,$mshQueue,$mshListFilename,$settings);
   }
 
   $mshQueue->enqueue(undef) for(@thr);
 
-  my $distfile="$$settings{tempdir}/distances.tsv";
+  my $distfile="$outdir/distances.tsv";
   open(DIST,">",$distfile) or die "ERROR: could not open $distfile for writing: $!";
   for(@thr){
     my $distfiles=$_->join;
@@ -181,9 +268,11 @@ sub mashDist{
 
 # 1. Read the mash distances
 # 2. Create a phylip file
-# 3. Run emboss's fneighbor
-sub distancesToTree{
-  my($distances,$settings)=@_;
+sub distancesToPhylip{
+  my($distances,$outdir,$settings)=@_;
+
+  my $phylip = "$outdir/distances.phylip"; 
+  return $phylip if(-e $phylip);
 
   logmsg "Reading the distances file at $distances";
   open(MASHDIST,"<",$distances) or die "ERROR: could not open $distances for reading: $!";
@@ -193,11 +282,9 @@ sub distancesToTree{
   while(<MASHDIST>){
     chomp;
     if(/^#query\s+(.+)/){
-      #$id=basename($1,@fastqExt);
       $id=_truncateFilename($1,$settings);
     } else {
       my @F=split(/\t/,$_);
-      #$F[0]=basename($F[0],@fastqExt);
       $F[0]=_truncateFilename($F[0],$settings);
       $m{$id}{$F[0]}=sprintf("%0.6f",$F[1]);
     }
@@ -206,6 +293,7 @@ sub distancesToTree{
 
   # Create the phylip file.
   # Make the text first so that we can edit it a bit.
+  # TODO I should probably make the matrix the bioperl way.
   logmsg "Creating the distance matrix file for fneighbor.";
   my %seenTruncName;
   my $phylipText="";
@@ -214,7 +302,7 @@ sub distancesToTree{
     my $name=_truncateFilename($genome[$i],$settings);
     $phylipText.="$name  "; 
     if($seenTruncName{$name}++){
-      #die "ERROR: genome names truncated to $$settings{truncLength} characters are not unique! Discovered when looking at $genome[$i].";
+      
     }
     for(my $j=0;$j<@genome;$j++){
       $phylipText.=$m{$genome[$i]}{$genome[$j]}."  ";
@@ -224,28 +312,28 @@ sub distancesToTree{
   $phylipText=~s/  $//gm;
 
   # Make the phylip file.
-  my $phylip = "$$settings{tempdir}/distances.phylip"; 
   open(PHYLIP,">",$phylip) or die "ERROR: could not open $phylip for writing: $!";
   print PHYLIP "    ".scalar(@genome)."\n";
   print PHYLIP $phylipText;
   close PHYLIP;
 
-  # Create the tree
-  logmsg "Creating tree with fneighbor";
-  system("fneighbor -datafile $phylip -outfile $$settings{tempdir}/fneighbor.txt -outtreefile $$settings{tempdir}/fneighbor.dnd -treetype neighbor-joining 1>&2");
-  die $! if $?;
+  return $phylip;
+}
 
-  # Read and edit the tree
-  open(TREE,"$$settings{tempdir}/fneighbor.dnd") or die $!;
-  my @treeLine=<TREE>;
+# Create tree file with BioPerl
+sub createTree{
+  my($phylip,$outdir,$settings)=@_;
+
+  logmsg "Creating a NJ tree with BioPerl";
+  my $dfactory = Bio::Tree::DistanceFactory->new(-method=>"NJ");
+  my $matrix   = Bio::Matrix::IO->new(-format=>"phylip", -file=>$phylip)->next_matrix;
+  my $treeObj = $dfactory->make_tree($matrix);
+  open(TREE,">","$outdir/tree.dnd") or die "ERROR: could not open $outdir/tree.dnd: $!";
+  print TREE $treeObj->as_text("newick");
   close TREE;
-  chomp(@treeLine);
-  my $treeContent=join("",@treeLine);
-  $treeContent=~s/^\s+|\s+$//gm; # whitespace and newline trim
-  $treeContent.="\n";            # However, give it a newline.
 
-  # Return the edited tree
-  return $treeContent;
+  return $treeObj;
+
 }
 
 #######
@@ -263,10 +351,16 @@ sub _truncateFilename{
 sub usage{
   "$0: use distances from Mash (min-hash algorithm) to make a NJ tree
   Usage: $0 *.fastq.gz > tree.dnd
-  --numcpus            1
-  --truncLength        10   How many characters to keep from a filename
+  --tempdir                 If not specified, one will be made for you
+                            and then deleted at the end of this script.
+  --numcpus            1    This script uses Perl threads.
+  --truncLength        100  How many characters to keep in a filename
   --warn-on-duplicate       Warn instead of die when a duplicate
                             genome name is found
+  --reps               0    How many bootstrap repetitions to run;
+                            If zero, no bootstrapping.  Uses 
+                            run_assembly_removeDuplicateReads.pl --nobin
+                            from CG-Pipeline to make random read sets.
 
   MASH SKETCH OPTIONS
   --genomesize   5000000
