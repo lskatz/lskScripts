@@ -386,9 +386,7 @@ sub usage{
   --warn-on-duplicate       Warn instead of die when a duplicate
                             genome name is found
   --reps               0    How many bootstrap repetitions to run;
-                            If zero, no bootstrapping.  Uses 
-                            run_assembly_removeDuplicateReads.pl --nobin
-                            from CG-Pipeline to make random read sets.
+                            If zero, no bootstrapping. 
 
   MASH SKETCH OPTIONS
   --genomesize   5000000
