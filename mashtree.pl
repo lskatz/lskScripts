@@ -7,7 +7,7 @@ use Data::Dumper;
 use Getopt::Long;
 use List::MoreUtils qw/uniq/;
 use File::Temp qw/tempdir tempfile/;
-use File::Basename qw/basename dirname/;
+use File::Basename qw/basename dirname fileparse/;
 use Bio::Tree::DistanceFactory;
 use Bio::Matrix::IO;
 use Bio::Tree::Statistics;
@@ -122,12 +122,7 @@ sub makeBootstrapReads{
   return [] if($reps < 1);
   
   # Enqueue the reads with a replicate ID
-  my $readsQ=Thread::Queue->new();
-  for(my $i=0;$i<$reps;$i++){
-    for my $r(@$reads){
-      $readsQ->enqueue([$i,$r]);
-    }
-  }
+  my $readsQ=Thread::Queue->new(@$reads);
 
   my @thr;
   for(0..$$settings{numcpus}-1){
@@ -148,18 +143,36 @@ sub makeBootstrapReads{
 sub subsampleReads{
   my($readsQ,$settings)=@_;
   my @fastqOut;
-  while(defined(my $tmp=$readsQ->dequeue)){
-    my($i,$r)=@$tmp; # replicate identifier, and reads filename
-    logmsg "Subsampling random reads from $r (replicate $i)";
-    my $outdir="$$settings{tempdir}/subsampledReads/$i";
-    system("mkdir -p $outdir");
-    my $outfile="$outdir/".basename($r,@fastqExt).".fastq";
-    if(! -e $outfile){
-      system("run_assembly_removeDuplicateReads.pl --nobin --downsample 0.1 $r > $outfile 2>/dev/null");
-      die "ERROR: problem with run_assembly_removeDuplicateReads.pl: $!" if $?;
-    }
+  while(defined(my $r=$readsQ->dequeue)){
+    my $readsFh=openFastq($r,$settings);
 
-    push(@fastqOut,$outfile);
+    # subsample each fastq file
+    REP: for my $rep(1..$$settings{reps}){
+      logmsg "Subsampling random reads from $r (rep: $rep)";
+      my $readCount=0;
+      my $outdir="$$settings{tempdir}/subsampledReads/$rep";
+      system("mkdir -p $outdir");
+      my $outfile="$outdir/".basename($r,@fastqExt).".fastq";
+      push(@fastqOut,$outfile);
+      open(FASTQOUT,">",$outfile) or die "ERROR: could not open $outfile for writing: $!";
+
+      # Just take 10000 entries for the sample
+      while(my $entry=<$readsFh>){
+        $entry.=<$readsFh> for(2..4);
+
+        # Put in some randomness on whether a read entry is accepted.
+        next if(rand() < 0.5);
+        print FASTQOUT $entry;
+
+        if(++$readCount > 10000){
+          close FASTQOUT;
+          next REP;
+        }
+      }
+      close FASTQOUT;
+    }
+    close $readsFh;
+
   }
   return \@fastqOut;
 }
@@ -346,6 +359,21 @@ sub _truncateFilename{
   $name=substr($name,0,$$settings{truncLength}); 
   $name.=" " x ($$settings{truncLength}-length($name)); 
   return $name;
+}
+
+sub openFastq{
+  my($fastq,$settings)=@_;
+
+  my $fh;
+
+  my @fastqExt=qw(.fastq.gz .fastq .fq.gz .fq);
+  my($name,$dir,$ext)=fileparse($fastq,@fastqExt);
+  if($ext =~/\.gz$/){
+    open($fh,"zcat $fastq | ") or die "ERROR: could not open $fastq for reading!: $!";
+  } else {
+    open($fh,"<",$fastq) or die "ERROR: could not open $fastq for reading!: $!";
+  }
+  return $fh;
 }
 
 sub usage{
