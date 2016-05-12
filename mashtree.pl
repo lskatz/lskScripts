@@ -35,7 +35,7 @@ exit main();
 
 sub main{
   my $settings={};
-  GetOptions($settings,qw(help tempdir=s numcpus=i genomesize=i mindepth=i reps=i truncLength=i warn-on-duplicate validate-reads)) or die $!;
+  GetOptions($settings,qw(help tempdir=s numcpus=i genomesize=i mindepth=i reps=i truncLength=i warn-on-duplicate validate-reads save-space)) or die $!;
   $$settings{numcpus}||=1;
   $$settings{truncLength}||=250;  # how long a genome name is
   $$settings{reps}||=0;
@@ -387,10 +387,6 @@ sub createTree{
 sub printRandomReadsToFile{
   my($infile,$outfile,$settings)=@_;
 
-  #system("run_assembly_removeDuplicateReads.pl --downsample 0.5 --nobin $infile 2>/dev/null | head -n 88888 > $outfile");
-  #die if $?;
-  #return 88888;
-
   my $numEntries=0;
   open(my $outFh,">",$outfile) or die "ERROR: could not open $outfile for writing: $!";
   my $fh=openFastq($infile,$settings);
@@ -401,6 +397,11 @@ sub printRandomReadsToFile{
     last if(++$numEntries > 10000);
   }
   close $fh;
+
+  if($$settings{'save-space'}){
+    system("gzip $outfile");
+    die if $?;
+  }
   
   return $numEntries;
 }
@@ -448,6 +449,8 @@ sub usage{
                             with $0?
                             Currently checks number of reads and 
                             uniqueness of filename.
+  --save-space              Save space in the temporary directory
+                            where possible
 
   MASH SKETCH OPTIONS
   --genomesize   5000000
