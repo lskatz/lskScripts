@@ -1,5 +1,7 @@
 #!/usr/bin/env perl
 # Author: Lee Katz <lkatz@cdc.gov>
+# Uses Mash and BioPerl to create a NJ tree based on distances.
+# Run this script with -h for help and usage.
 
 use strict;
 use warnings;
@@ -14,24 +16,35 @@ use Bio::Tree::Statistics;
 
 use threads;
 use Thread::Queue;
+use threads::shared;
 
 local $0=basename $0;
 my @fastqExt=qw(.fastq.gz .fastq .fq.gz .fq);
+my $fhStick :shared;  # A thread can only open a fastq file if it has the talking stick.
 
-sub logmsg{ print STDERR "$0: @_\n";}
+# Smart log messaging with thread IDs
+sub logmsg{ 
+  my $tid=threads->tid || 0;
+  if($tid > 0){
+    $tid = " (TID$tid)";
+  }
+  print STDERR "$0$tid: @_\n";
+}
 
 exit main();
 
 sub main{
   my $settings={};
-  GetOptions($settings,qw(help tempdir=s numcpus=i genomesize=i mindepth=i reps=i truncLength=i warn-on-duplicate)) or die $!;
+  GetOptions($settings,qw(help tempdir=s numcpus=i genomesize=i mindepth=i reps=i truncLength=i warn-on-duplicate validate-reads)) or die $!;
   $$settings{numcpus}||=1;
-  $$settings{genomesize}||=5000000;
-  $$settings{mindepth}||=2;
-  $$settings{truncLength}||=100;  # how long a genome name is
+  $$settings{truncLength}||=250;  # how long a genome name is
   $$settings{reps}||=0;
   $$settings{tempdir}||=tempdir("MASHTREE.XXXXXX",CLEANUP=>1,TMPDIR=>1);
   logmsg "Temporary directory will be $$settings{tempdir}";
+
+  # Mash-specific options
+  $$settings{genomesize}||=5000000;
+  $$settings{mindepth}||=2;
 
   die usage() if($$settings{help});
 
@@ -46,7 +59,7 @@ sub main{
 
   logmsg "$0 on ".scalar(@reads)." files";
 
-  validateFastq(\@reads,$settings);
+  validateFastq(\@reads,$settings) if($$settings{'validate-reads'});
 
   # This step will return an empty array list if there are no reps
   my $repsDirs=makeBootstrapReads(\@reads,$$settings{reps},$settings);
@@ -97,7 +110,10 @@ sub main{
 
 sub validateFastq{
   my($reads,$settings)=@_;
+
+  logmsg "Validating your read sets";
   
+  # Check whether the filenames are unique enough
   my %seen;
   for my $r(@$reads){
     my $trunc=_truncateFilename($r,$settings);
@@ -112,6 +128,23 @@ sub validateFastq{
     $seen{$trunc}=$r;
   }
 
+  # Check whether there could be enough reads in the read set.
+  # Do this by going to the 10k-th line and seeing if we've
+  # reached the end of the file yet.
+  for my $r(@$reads){
+    my $fastqFh=openFastq($r,$settings);
+    my $numLines=0;
+    while(<$fastqFh>){
+      $numLines++;
+      last if($numLines > 100000);
+    }
+    if(eof($fastqFh)){
+      die "ERROR: $r has too few reads: ". ($numLines/4);
+    }
+    close $fastqFh;
+  }
+  logmsg "Done validating reads";
+
   # TODO: use validateFastq.pl?  Or is that outside of this 
   # script's scope?
 
@@ -122,14 +155,20 @@ sub makeBootstrapReads{
   return [] if($reps < 1);
   
   # Enqueue the reads with a replicate ID
-  my $readsQ=Thread::Queue->new(@$reads);
+  my $readsQ=Thread::Queue->new();
+  for(my $i=1;$i<=$reps;$i++){
+    for my $r(@$reads){
+      $readsQ->enqueue([$i,$r]);
+    }
+  }
 
   my @thr;
   for(0..$$settings{numcpus}-1){
     $thr[$_]=threads->new(\&subsampleReads, $readsQ, $settings);
   }
 
-  $readsQ->enqueue(undef) for(@thr);
+  my @terminator=(undef) x scalar(@thr);
+  $readsQ->enqueue(@terminator);
   my @reads;
   for(@thr){
     my $rList=$_->join;
@@ -143,38 +182,30 @@ sub makeBootstrapReads{
 sub subsampleReads{
   my($readsQ,$settings)=@_;
   my @fastqOut;
-  while(defined(my $r=$readsQ->dequeue)){
+  while(defined(my $tmp=$readsQ->dequeue())){
+    my($rep,$r)=@$tmp;
     my $readsFh=openFastq($r,$settings);
 
     # subsample each fastq file
-    REP: for my $rep(1..$$settings{reps}){
-      logmsg "Subsampling random reads from $r (rep: $rep)";
-      my $readCount=0;
-      my $outdir="$$settings{tempdir}/subsampledReads/$rep";
-      system("mkdir -p $outdir");
-      my $outfile="$outdir/".basename($r,@fastqExt).".fastq";
-      push(@fastqOut,$outfile);
-      open(FASTQOUT,">",$outfile) or die "ERROR: could not open $outfile for writing: $!";
+    my $readCount=0;
+    my $outdir="$$settings{tempdir}/subsampledReads/$rep";
+    system("mkdir -p $outdir");
+    my $outfile="$outdir/".basename($r,@fastqExt).".fastq";
+    push(@fastqOut,$outfile);
 
-      # Just take 10000 entries for the sample
-      while(my $entry=<$readsFh>){
-        $entry.=<$readsFh> for(2..4);
-
-        # Put in some randomness on whether a read entry is accepted.
-        next if(rand() < 0.5);
-        print FASTQOUT $entry;
-
-        if(++$readCount > 10000){
-          close FASTQOUT;
-          next REP;
-        }
-      }
-      close FASTQOUT;
-    }
-    close $readsFh;
-
+    logmsg "(rep $rep) Getting random reads from $r";
+    
+    # Use CGP to get random entries via downsampling.
+    # Get the first 88888 lines of the fastq file.
+    # Any number ending in 888 is a multiple of 8, so it doesn't
+    # split up any fastq entries.
+    printRandomReadsToFile($r,$outfile,$settings);
   }
-  return \@fastqOut;
+
+  # Return a unique list because the re-enqueuing nonsense
+  # might make duplicate entries.
+  # TODO: I probably don't need to uniq this because I'm not requeuing anymore.
+  return [uniq(@fastqOut)];
 }
 
 # Run mash sketch on everything, multithreaded.
@@ -353,6 +384,29 @@ sub createTree{
 # Utils
 #######
 
+sub printRandomReadsToFile{
+  my($infile,$outfile,$settings)=@_;
+
+  #system("run_assembly_removeDuplicateReads.pl --downsample 0.5 --nobin $infile 2>/dev/null | head -n 88888 > $outfile");
+  #die if $?;
+  #return 88888;
+
+  my $numEntries=0;
+  open(my $outFh,">",$outfile) or die "ERROR: could not open $outfile for writing: $!";
+  my $fh=openFastq($infile,$settings);
+  while(my $entry=<$fh> . <$fh> . <$fh> . <$fh>){
+    next if(rand() < 0.5);
+
+    print $outFh $entry;
+    last if(++$numEntries > 10000);
+  }
+  close $fh;
+  
+  return $numEntries;
+}
+
+# Removes fastq extension, removes directory name,
+# truncates to a length, and adds right-padding.
 sub _truncateFilename{
   my($file,$settings)=@_;
   my $name=basename($file,@fastqExt);
@@ -361,10 +415,13 @@ sub _truncateFilename{
   return $name;
 }
 
+# Opens a fastq file in a thread-safe way.
 sub openFastq{
   my($fastq,$settings)=@_;
 
   my $fh;
+
+  lock($fhStick);
 
   my @fastqExt=qw(.fastq.gz .fastq .fq.gz .fq);
   my($name,$dir,$ext)=fileparse($fastq,@fastqExt);
@@ -387,6 +444,10 @@ sub usage{
                             genome name is found
   --reps               0    How many bootstrap repetitions to run;
                             If zero, no bootstrapping. 
+  --validate-reads          Do you want to see if your reads will work
+                            with $0?
+                            Currently checks number of reads and 
+                            uniqueness of filename.
 
   MASH SKETCH OPTIONS
   --genomesize   5000000
