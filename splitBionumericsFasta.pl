@@ -18,7 +18,7 @@ sub main{
   while(my $seq=$in->next_seq){
     my @seq=split(/\|/,$seq->seq);
     my $id=$seq->id;
-    for(my $i=1;$i<@seq;$i++){
+    for(my $i=1;$i<=@seq;$i++){
       my $subseq=Bio::Seq->new(-seq=>$seq[$i-1],-id=>$id."_".$i);
       $out->write_seq($subseq);
     }
