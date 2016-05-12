@@ -35,6 +35,7 @@ exit main();
 
 sub main{
   my $settings={};
+  logmsg "WARNING: this script has been moved to https://github.com/lskatz/mashtree";
   GetOptions($settings,qw(help tempdir=s numcpus=i genomesize=i mindepth=i reps=i truncLength=i warn-on-duplicate validate-reads save-space)) or die $!;
   $$settings{numcpus}||=1;
   $$settings{truncLength}||=250;  # how long a genome name is
