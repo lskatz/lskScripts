@@ -63,7 +63,7 @@ sub treeInfo{
     push(@out,$avg);
   }
 
-  push(@out,join(",",@leaf)) if($$settings{taxa});
+  push(@out,join(",",sort { $a cmp $b} @leaf)) if($$settings{taxa});
 
   print join("\t",@out)."\n";
 }
