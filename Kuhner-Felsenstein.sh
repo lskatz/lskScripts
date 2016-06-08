@@ -39,7 +39,8 @@ t2="$tmpdir/$(basename $tree2)"
 #   the the tree to compare against's parameters
 comparisonTrees="$tmpdir/compareAgainst.dnd";
 cp $t2 $comparisonTrees
-randTrees.pl $t1 --numTrees 100 >> $comparisonTrees
+randTrees.pl $t1 --numTrees 500 >> $comparisonTrees
+randTrees.pl $t2 --numTrees 500 >> $comparisonTrees
 ln -s $t1 "$tmpdir/intree"
 ln -s $comparisonTrees "$tmpdir/intree2"
 
