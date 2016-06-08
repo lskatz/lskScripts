@@ -1,7 +1,7 @@
 #!/bin/bash
 
-tree1=$1
-tree2=$2
+export tree1=$1
+export tree2=$2
 
 script=$(basename $0);
 if [ "$tree1" == "" ]; then
@@ -71,15 +71,14 @@ cat outfile | perl -MStatistics::Descriptive -MMath::Gauss=cdf,pdf -MList::Util=
 
     $Z=($obs - $avg)/$stdev;
     $p=cdf($obs,$avg,$stdev);
-    #$p=cdf($Z);
 
     # scientific and floating point formatting
     $_=sprintf("%0.2e",$_) for($p);
     $_=sprintf("%0.2f",$_) for($obs,$avg,$stdev,$Z);
 
     # Print results
-    print join("\t",qw(obs num avg stdev Z p));
-    print join("\t",$obs, $num, $avg,$stdev,$Z,$p);
+    print join("\t",qw(tree1 tree2 obs num avg stdev Z p));
+    print join("\t",$ENV{tree1},$ENV{tree2},$obs, $num, $avg,$stdev,$Z,$p);
   }
 '
 
