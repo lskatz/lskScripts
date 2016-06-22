@@ -22,6 +22,7 @@ sub main{
   }
   
   my $lineCount=0;
+  my $numFixed=0;
   while(<>){
     # Print headers
     if(/^#/){
@@ -37,12 +38,16 @@ sub main{
     $F[2]=uc($F[2]);
 
     # Fix up the kmer line and print it
-    fixPosition(\@F,\%seq,$settings);
+    $numFixed += !! fixPosition(\@F,\%seq,$settings);
 
     if($lineCount % reportEvery == 0){
-      logmsg "Fixed $lineCount lines so far";
+      my $percent=int($numFixed/$lineCount * 100);
+      logmsg "Have fixed $numFixed out of $lineCount ($percent%)";
     }
   }
+
+  my $percent=int($numFixed/$lineCount * 100);
+  logmsg "Fixed $numFixed out of $lineCount ($percent%)";
 }
 
 sub fixPosition{
@@ -68,7 +73,7 @@ sub fixPosition{
     }
   }
 
-  logmsg "ERROR: I could not find kmer $$F[0] in $$settings{ref}" if($numMatches < 1);
+  logmsg "WARNING: I could not find kmer $$F[0] in $$settings{ref}" if($numMatches < 1);
   return $numMatches;
 }
 
