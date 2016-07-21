@@ -13,14 +13,18 @@ suppressMessages(
   library(tools, quietly=TRUE)
 )
 
+logmsg <- function(msg){
+  cat(paste(c("Kendall.R:",msg),sep=""),"\n", file=stderr())
+}
+
 # Get pristine ARGV
 #argv <- commandArgs(trailingOnly=FALSE);
 #thisScript = substring(argv[grep("--file=", argv)], 8)
 
 # Get command line parameters
-doc <- "Description: This script uses the Kendall-Colijn phylogeny metric to determine the distance between two rooted trees.  See: Kendall and Colijn 2015, Arxiv
+doc <- "Description: This script uses the Kendall-Colijn phylogeny metric to see if one or more query trees are close to a reference tree.  See: Kendall and Colijn 2015, Arxiv
 
-Usage: Kendall.R [--lambda=f] [options] TREE TREE... 
+Usage: Kendall.R [--lambda=f] [options] REFERENCE_TREE QUERY_TREE... 
 
 All results are printed to stdout.
 
@@ -46,7 +50,7 @@ All results are printed to stdout.
 
 # Script options
 opts <- docopt(doc)
-treefiles <- opts$TREE
+treefiles <- c(opts$REFERENCE_TREE,opts$QUERY_TREE)
 # Which values of lambda to calculate with? Values can be 0 to 1.
 lambda <- as.double(opts$lambda)
 reps    <- opts$rep
@@ -68,18 +72,22 @@ if(reps < 1){
 
 ########################
 # START Functions
-logmsg <- function(msg){
-  cat(paste(c("Kendall.R:",msg),sep=""),"\n", file=stderr())
-}
 
-kendallBackground <- function(treeObj, treeObj2, lambdaCoefficient, rep=1000){
+# The background distribution helps answer whether a query tree is
+# close enough to a reference tree.  In the Lyve-SET paper, we would
+# be asking for example, if kSNP3's tree (query) is close to the 
+# Lyve-SET (reference) tree
+# In particular, this distribution is the set of Kendall scores of
+# the query tree vs random trees
+#                          e.g., kSNP    e.g., Lyve-SET
+kendallBackground <- function(queryTree, lambdaCoefficient, rep=1000){
   # Figure out taxa
-  taxa=treeObj$tip.label
+  taxa=queryTree$tip.label
   numTaxa=length(taxa)
   # Figure out max and min branch lengths for br=
-  branchLength=sort(c(treeObj$edge.length,treeObj2$edge.length))
-  minLength=branchLength[1]
-  maxLength=branchLength[length(branchLength)]
+  branchLength=sort(queryTree$edge.length)
+  minLength=min(branchLength)
+  maxLength=max(branchLength)
 
   # Have to make the multiphylo object.
   # The first element is the original tree.
@@ -87,17 +95,19 @@ kendallBackground <- function(treeObj, treeObj2, lambdaCoefficient, rep=1000){
   # Convert to multiphylo for Kendall metric
   mytrees <- vector("list",2)
   class(mytrees) <- "multiphylo"
-  mytrees[[1]]=treeObj
+  mytrees[[1]]=queryTree
 
   # Start recording the kendal metric in a vector.
   # It can be averaged out later.
   kendallVec=c()
   for(i in 1:rep){
-    # Generate random branch lengths without replacement
-    randBranchLength=sample(branchLength, replace=FALSE);
+    # Make a distribution of branch lengths 
+    # whose min and max are defined above
+    randBranchLength <- runif(length(branchLength), min=minLength, max=maxLength)
 
     # Generate a random tree with random taxa and branch lengths
-    mytrees[[2]] <- rtree(numTaxa,rooted=TRUE, tip.label=taxa, randBranchLength)
+    #mytrees[[2]] <- rtree(numTaxa,rooted=TRUE, tip.label=taxa, randBranchLength)
+    mytrees[[2]] <- rcoal(numTaxa, rooted=TRUE, tip.label=taxa, br=randBranchLength)
     mytrees <- .compressTipLabel(mytrees)
 
     # Find the Kendall metric between this random tree and the 
@@ -105,8 +115,7 @@ kendallBackground <- function(treeObj, treeObj2, lambdaCoefficient, rep=1000){
     kendall <- multiDist(mytrees, lambda = lambdaCoefficient);
     kendallVec=append(kendallVec,kendall)
   }
-  kendallVec
-  #return(kendallVec)
+  kendallVec  # returns the kendall values
 }
 
 plotBackground <- function(distribution, observed){
@@ -186,56 +195,58 @@ cat(paste(header,sep="\t"),"\n",sep="\t")
 
 # Calculating the Kendall pairwise distance
 histogram=c() # saving histogram plots in case I want them later
-for(t in 1:(length(mytrees)-1)){
-  logmsg(c("Kendal distances for",treefiles[t]))
+t <- 1
+logmsg(c("Kendal distances with",treefiles[t],"as a reference"))
+for(u in 1:length(mytrees)){
 
-  for(u in (t+1):length(mytrees)){
+  # Check if taxa are comparable
+  if(!identical(sort(mytrees[[t]]$tip.label) , sort(mytrees[[u]]$tip.label))){
+    stop(paste(c("ERROR: tips of ",treefiles[t]," and ",treefiles[u]," are different")));
+  }
 
-    # Get the background of Kendall distributions
-    if(opts$background){
-      background=kendallBackground(mytrees[[t]],mytrees[[u]],lambda,rep=reps)
-      backgroundMean=mean(background)
-      backgroundSd = sd(background)
-    }
+  logmsg(c("Query:",treefiles[u]))
 
-    # List of tree files from which to calculate
-    treeVector=c(mytrees[t],mytrees[u]);
+  queryTree <- mytrees[[u]]
+  referenceTree <- mytrees[[t]]
+  # List of tree files from which to calculate
+  treeVector <- c(queryTree, referenceTree);
 
-    # Calculate Kendall metric
-    dist=multiDist(treeVector, lambda = lambda)
-    dist=dist[1]
+  # Calculate Kendall metric of the reference vs query
+  dist <- multiDist(treeVector, lambda = lambda)
+  dist <- dist[1]
 
-    # Generate output
-    rowVector=c(treefiles[t],treefiles[u],lambda,round(dist,digits=2))
+  # Generate output
+  rowVector=c(treefiles[t],treefiles[u],lambda,round(dist,digits=2))
 
-    # background distribution
-    if(opts$background){
-      # Calculate Z and P
-      z <- (dist - backgroundMean)/backgroundSd # Want to know whether the background is bigger than observed
-      pvalue <- pnorm(z)
+  # Get the background of Kendall distributions
+  if(opts$background){
+    background=kendallBackground(queryTree, lambda,rep=reps)
+    backgroundMean=mean(background)
+    backgroundSd = sd(background)
 
-      # Formatting for output
-      distributionString=paste(round(backgroundMean,digits=2),"±",round(backgroundSd,digits=2),sep="")
-      pvalueString=round(pvalue,digits=6)
-      zString=round(z,digits=2)
+    # Calculate Z and P
+    z <- (dist - backgroundMean)/backgroundSd # Want to know whether the background is bigger than observed
+    pvalue <- pnorm(z)
 
-      # Add onto the output vector
-      rowVector=append(rowVector,c(distributionString,reps,zString,pvalueString))
-      
-    }
+    # Formatting for output
+    distributionString=paste(round(backgroundMean,digits=2),"±",round(backgroundSd,digits=2),sep="")
+    pvalueString=round(pvalue,digits=4)
+    zString=round(z,digits=2)
 
-    # Print the output
-    cat(paste(rowVector,sep="\t"),"\n",sep="\t");
+    # Add onto the output vector
+    rowVector=append(rowVector,c(distributionString,reps,zString,pvalueString))
+  }
 
-    if(opts$plot){
-      outfile=paste(t,"_",u,".bmp",sep="")
-      my_histogram=append(histogram,plotBackground(background,dist))
-      logmsg(c("Printing to file",outfile))
-      suppressMessages(
-        ggsave(filename=outfile)
-      )
-    }
+  # Print the output
+  cat(paste(rowVector,sep="\t"),"\n",sep="\t");
+
+  if(opts$plot){
+    outfile=paste("Kendall.",u,".bmp",sep="")
+    my_histogram=append(histogram,plotBackground(background,dist))
+    logmsg(c("Printing to file",outfile))
+    suppressMessages(
+      ggsave(filename=outfile)
+    )
   }
 }
-#print(histogram)
 
