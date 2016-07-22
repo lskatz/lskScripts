@@ -187,7 +187,7 @@ mytrees <- .compressTipLabel(mytrees)
 
 
 # Print headers
-header=c("Tree1","Tree2","lambda","Kendall");
+header=c("Reference","Query","lambda","Kendall");
 if(opts$background){
   header=append(header,c("BackgroundKendall","n","Z","p-value"));
 }
@@ -211,7 +211,7 @@ for(u in 1:length(mytrees)){
   # List of tree files from which to calculate
   treeVector <- c(queryTree, referenceTree);
 
-  # Calculate Kendall metric of the reference vs query
+  # Calculate Kendall metric of the query vs reference
   dist <- multiDist(treeVector, lambda = lambda)
   dist <- dist[1]
 
