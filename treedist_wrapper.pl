@@ -24,9 +24,9 @@ sub main{
   $$settings{tempdir}||=tempdir(basename($0).".XXXXXX",TMPDIR=>1,CLEANUP=>1);
   $$settings{tempdir}=File::Spec->rel2abs($$settings{tempdir});
 
-  my($ref,$query)=@ARGV;
+  my($ref,@query)=@ARGV;
 
-  die usage() if(!$ref || !$query || $$settings{help});
+  die usage() if(!$ref || !@query || $$settings{help});
 
   # Check executables
   for my $exe (qw(treedist randTrees.pl)){
@@ -37,20 +37,22 @@ sub main{
   logmsg "Temporary dir is $$settings{tempdir}";
 
   print join("\t",qw(Ref Query num obs avg stdev Z p))."\n";
-  my $stat={};
-  $$settings{method}=lc($$settings{method});
-  if($$settings{method} eq "kf"){
-    $stat=kuhnerFelsenstein($ref,$query,$settings);
-  } elsif($$settings{method} eq "rf"){
-    $stat=robinsonFoulds($ref,$query,$settings);
-  } else {
-    die "ERROR: I do not understand method $$settings{method}";
-  }
+  for my $query(@query){
+    my $stat={};
+    $$settings{method}=lc($$settings{method});
+    if($$settings{method} eq "kf"){
+      $stat=kuhnerFelsenstein($ref,$query,$settings);
+    } elsif($$settings{method} eq "rf"){
+      $stat=robinsonFoulds($ref,$query,$settings);
+    } else {
+      die "ERROR: I do not understand method $$settings{method}";
+    }
 
-  $$stat{$_}=sprintf("%0.2f",$$stat{$_}) for(qw(obs avg stdev Z p));
-  print join("\t",$$stat{ref},$$stat{query}, $$stat{num}, $$stat{obs},
-                  $$stat{avg}, $$stat{stdev}, $$stat{Z}, $$stat{p});
-  print "\n";
+    $$stat{$_}=sprintf("%0.2f",$$stat{$_}) for(qw(obs avg stdev Z p));
+    print join("\t",$$stat{ref},$$stat{query}, $$stat{num}, $$stat{obs},
+                    $$stat{avg}, $$stat{stdev}, $$stat{Z}, $$stat{p});
+    print "\n";
+  }
 
   return 0;
 }
