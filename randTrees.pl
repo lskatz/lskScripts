@@ -6,8 +6,14 @@ use Bio::TreeIO;
 use Getopt::Long;
 use File::Basename qw/basename/;
 use Data::Dumper qw/Dumper/;
-use List::Util qw/shuffle/;
+use List::Util qw/min max shuffle/;
 use List::MoreUtils qw/uniq/;
+
+use threads;
+use Thread::Queue;
+use threads::shared;
+
+my $numTrees :shared = 0;   # number of trees that have been printed
 
 local $0=basename $0;
 sub logmsg { print STDERR "$0: @_\n"}
@@ -16,8 +22,9 @@ exit main();
 
 sub main{
   my $settings={};
-  GetOptions($settings,qw(help numTrees=i)) or die $!;
+  GetOptions($settings,qw(help numTrees=i numcpus=i)) or die $!;
   $$settings{numTrees}||=1;
+  $$settings{numcpus}||=1;
 
   my @tree=@ARGV;
 
@@ -35,24 +42,49 @@ sub main{
   @branchLength=shuffle(@branchLength);
   my $numBranchLength=@branchLength;
 
+  my @thr;
+  for (0..$$settings{numcpus}-1){
+    $thr[$_]=threads->new(\&randTreeWorker,[@sampleName],min(@branchLength),max(@branchLength),$settings);
+  }
+
+  # Join all threads safely
+  for(@thr){
+    $_->join;
+  }
+
+  return 0;
+}
+
+sub randTreeWorker{
+  my($sampleName,$minBranchLength,$maxBranchLength,$settings)=@_;
+
   # Create as many random trees as requested
-  my $factory=Bio::Tree::RandomFactory->new(-taxa=>\@sampleName,-maxcount=>$$settings{numTrees});
+  my @printBuffer;
+  my $maxTrees=$$settings{numTrees}/$$settings{numcpus} + 1;
+  my $factory=Bio::Tree::RandomFactory->new(-taxa=>$sampleName,-maxcount=>$maxTrees);
   while(my $tree=$factory->next_tree){
     # Alter the nodes to my liking
     for my $node($tree->get_nodes){
       # Get random branch lengths from the original trees
-      my $newBranchLength=$branchLength[int(rand($numBranchLength))];
+      my $newBranchLength=$minBranchLength+rand($maxBranchLength-$minBranchLength);
       $node->branch_length($newBranchLength);
-      if($node->is_Leaf){
-        
-      } 
       # Give it a high bootstrap because we're not randomizing that
-      else {
+      if(!$node->is_Leaf){
         $node->bootstrap(100);
         $node->id(100);
       }
     }
-    print $tree->as_text("newick")."\n";
+    push(@printBuffer,$tree->as_text("newick")."\n");
+  }
+  
+  # Print
+  {
+    lock($numTrees);
+    for(@printBuffer){
+      $numTrees++;
+      last if($numTrees > $$settings{numTrees});
+      print $_;
+    }
   }
 
   return 0;
@@ -81,7 +113,11 @@ sub readSamplesAndBranchs{
 }
 
 sub usage{
-  "$0: uses real trees to create random trees
+  "$0: uses real trees to create random trees. 
+  Min/max of all tree branch lengths will be used.
+  A list of all unique taxon names will be used.
   Usage: $0 realtree.dnd [realtree2.dnd...]
+  --numTrees   1   How many trees to produce
+  --numcpus    1   Cpus to use
   "
 }
