@@ -84,7 +84,7 @@ sub kuhnerFelsenstein{
   my $comparisonTrees="$$settings{tempdir}/compareAgainst.dnd";
   cp($tmpRefTree,$comparisonTrees) or die $!;
   logmsg "Generating $$settings{numtrees} random trees";
-  system("randTrees.pl $tmpQueryTree --numcpus $$settings{numcpus} --numtrees $$settings{numtrees} >> $comparisonTrees"); die if $?;
+  system("randTrees.pl $tmpQueryTree --force-binary --numcpus $$settings{numcpus} --numtrees $$settings{numtrees} >> $comparisonTrees"); die if $?;
   # We need the files to be named intree and intree2 because of inflexible treedist
   symlink(basename($tmpQueryTree),"$$settings{tempdir}/intree");
   symlink(basename($comparisonTrees),"$$settings{tempdir}/intree2");

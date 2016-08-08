@@ -22,9 +22,10 @@ exit main();
 
 sub main{
   my $settings={};
-  GetOptions($settings,qw(help numTrees=i numcpus=i)) or die $!;
+  GetOptions($settings,qw(help numTrees=i numcpus=i force-binary)) or die $!;
   $$settings{numTrees}||=1;
   $$settings{numcpus}||=1;
+  $$settings{'force-binary'}||=0;
 
   my @tree=@ARGV;
 
@@ -63,6 +64,10 @@ sub randTreeWorker{
   my $maxTrees=$$settings{numTrees}/$$settings{numcpus} + 1;
   my $factory=Bio::Tree::RandomFactory->new(-taxa=>$sampleName,-maxcount=>$maxTrees);
   while(my $tree=$factory->next_tree){
+    if($$settings{'force-binary'}){
+      $tree->contract_linear_paths();
+      $tree->force_binary();
+    }
     # Alter the nodes to my liking
     for my $node($tree->get_nodes){
       # Get random branch lengths from the original trees
@@ -117,7 +122,12 @@ sub usage{
   Min/max of all tree branch lengths will be used.
   A list of all unique taxon names will be used.
   Usage: $0 realtree.dnd [realtree2.dnd...]
-  --numTrees   1   How many trees to produce
-  --numcpus    1   Cpus to use
+  --numTrees           1   How many trees to produce
+  --numcpus            1   Cpus to use
+  --force-binary           Forces a binary tree: contracts
+                           single-descendent nodes;
+                           splits multifurcating nodes
+                           such that there are exactly two
+                           descendents per ancestor node.
   "
 }
