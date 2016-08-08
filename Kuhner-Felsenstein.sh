@@ -1,11 +1,11 @@
 #!/bin/bash
 
-export tree1=$1
-export tree2=$2
+export ref_tree=$1
+export query_tree=$2
 
 script=$(basename $0);
-if [ "$tree1" == "" ]; then
-  echo "Usage: $script tree1.dnd tree2.dnd"
+if [ "$ref_tree" == "" ]; then
+  echo "Usage: $script ref.dnd query.dnd"
   exit 1;
 fi;
 
@@ -23,25 +23,27 @@ for exe in treedist randTrees.pl; do
 done;
 
 mkdir -p /tmp/$USER
-tmpdir=$(mktemp --directory --tmpdir=/tmp/$USER Robinson-Foulds.XXXXXX)
+tmpdir=$(mktemp --directory --tmpdir=/tmp/$USER Kuhner-Felsenstein.XXXXXX)
 if [ $? -gt 0 ]; then logmsg "ERROR making temporary directory under /tmp/$USER"; exit 1; fi;
 logmsg "Temporary dir is $tmpdir";
 
-cp $tree1 $tmpdir/ &&\
-cp $tree2 $tmpdir/
+cp $ref_tree $tmpdir/ &&\
+cp $query_tree $tmpdir/
 
-t1="$tmpdir/$(basename $tree1)"
-t2="$tmpdir/$(basename $tree2)"
+tmpRefTree="$tmpdir/$(basename $ref_tree)"
+tmpQueryTree="$tmpdir/$(basename $query_tree)"
 
-# Create a list of trees to compare against:
-#   The first tree is the tree to compare against.
+# Create a list of trees to compare against in $comparisonTrees:
+#   The first tree is the reference tree
 #   The next trees are randomly made trees from 
-#   the the tree to compare against's parameters
+#   the query tree.
+#   Therefore, the question being answered is, is the query
+#   closer to the ref than random trees?
 comparisonTrees="$tmpdir/compareAgainst.dnd";
-cp $t2 $comparisonTrees
-randTrees.pl $t1 --numTrees 500 >> $comparisonTrees
-randTrees.pl $t2 --numTrees 500 >> $comparisonTrees
-ln -s $t1 "$tmpdir/intree"
+cp $tmpRefTree $comparisonTrees
+randTrees.pl $tmpQueryTree --numTrees 1000 >> $comparisonTrees
+# We need the files to be named intree and intree2 because of inflexible treedist
+ln -s $tmpQueryTree "$tmpdir/intree"
 ln -s $comparisonTrees "$tmpdir/intree2"
 
 # Must do treedist in the temp directory because it pollutes the
@@ -78,8 +80,8 @@ cat outfile | perl -MStatistics::Descriptive -MMath::Gauss=cdf,pdf -MList::Util=
     $_=sprintf("%0.2f",$_) for($obs,$avg,$stdev,$Z);
 
     # Print results
-    print join("\t",qw(tree1 tree2 obs num avg stdev Z p));
-    print join("\t",$ENV{tree1},$ENV{tree2},$obs, $num, $avg,$stdev,$Z,$p);
+    print join("\t",qw(ref_tree query_tree obs num avg stdev Z p));
+    print join("\t",$ENV{ref_tree},$ENV{query_tree},$obs, $num, $avg,$stdev,$Z,$p);
   }
 '
 
