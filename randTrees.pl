@@ -65,10 +65,14 @@ sub randTreeWorker{
   my $factory=Bio::Tree::RandomFactory->new(-taxa=>$sampleName,-maxcount=>$maxTrees);
   while(my $tree=$factory->next_tree){
     if($$settings{'force-binary'}){
+      logmsg "not binary: ".$tree->as_text("newick") if(!$tree->is_binary());
       $tree->contract_linear_paths();
       $tree->force_binary();
+      die "not binary: ".$tree->as_text("newick") if(!$tree->is_binary());
     }
     # Alter the nodes to my liking
+    my $longestBranchLength=0;
+    my $longestNode;
     for my $node($tree->get_nodes){
       # Get random branch lengths from the original trees
       my $newBranchLength=$minBranchLength+rand($maxBranchLength-$minBranchLength);
@@ -78,7 +82,13 @@ sub randTreeWorker{
         $node->bootstrap(100);
         $node->id(100);
       }
+
+      if($newBranchLength > $longestBranchLength && $tree->get_root_node ne $node){
+        $longestBranchLength=$newBranchLength;
+        $longestNode=$node;
+      }
     }
+    $tree->reroot_at_midpoint($longestNode);
     push(@printBuffer,$tree->as_text("newick")."\n");
   }
   
