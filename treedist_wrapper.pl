@@ -72,8 +72,17 @@ sub main{
 sub bioPhyloDist{
   my($ref,$query,$method,$settings)=@_;
 
-  # First find the observed value
-  my $obs=observedScore($query,$ref,$$settings{method},$settings);
+  # First find the observed value.
+  # The tree might be multifurcating and therefore might give a non-zero
+  # observed result.  Rerun this test until we see a zero.
+  my $obs;
+  my $tries=0;
+  do{
+    $obs=observedScore($query,$ref,$method,$settings);
+    if($tries++ > 1000){
+      die "ERROR: tried to get a zero self vs self score for $ref but couldn't after $tries tries. The tree might be too multifurcating. Force bifurcation and try again";
+    }
+  } while($ref eq $query && $obs != 0);
 
   # Next run a test against a random background distribution
 
@@ -105,12 +114,12 @@ sub bioPhyloDist{
 
     my $stat=Statistics::Descriptive::Full->new();
     $stat->add_data(@scores);
-    my $avg=$stat->mean;
-    my $stdev=$stat->standard_deviation;
-    my $Z=($obs - $avg)/$stdev;
-    my $p=cdf($obs,$avg,$stdev);
+    $avg=$stat->mean;
+    $stdev=$stat->standard_deviation;
+    $stdev=1e-9 if($stdev <= 0);
+    $Z=($obs - $avg)/$stdev;
+    $p=cdf($obs,$avg,$stdev);
   }
-
   
   return {Z=>$Z, p=>$p, obs=>$obs, num=>scalar(@scores), avg=>$avg, stdev=>$stdev, query=>$query, ref=>$ref};
 
@@ -194,10 +203,12 @@ sub observedScore{
 sub usage{
   local $0=basename $0;
   "$0: compares two trees
-  Usage: $0 ref.dnd query.dnd
+  Usage: $0 ref.dnd query.dnd [query2.dnd...]
   --method    kf     kf:  kuhner-felsenstein (branch length distance)
                      kf2: branch length score (k-f squared)
                      rf:  robinson-foulds (symmetric distance)
+                     WARNING: the kf and kf2 metrics do not produce
+                     the same values as R-phangorn or Phylip-treedist.
   --numtrees  1000   How many random trees to compare against?
                      Use 0 to not run a statistical test.
   "
