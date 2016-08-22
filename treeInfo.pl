@@ -6,6 +6,7 @@ use Data::Dumper;
 use Bio::TreeIO;
 use Getopt::Long;
 use File::Basename qw/basename/;
+use List::MoreUtils qw/uniq/;
 
 sub logmsg{local $0=basename $0; print STDERR "$0: @_\n";}
 exit(main());
@@ -21,6 +22,7 @@ sub main{
   }
 
   my @tree=@ARGV;
+  my $numTrees=@tree;
 
   die usage() if(!@tree || $$settings{help});
 
@@ -30,31 +32,45 @@ sub main{
   print join("\t",@header)."\n";
 
   my %taxa;
+  my @taxa;
   for my $t(@tree){
     my $taxa=treeInfo($t,$settings);
     for(@$taxa){
+      push(@taxa,@$taxa);
       $taxa{$t}{$_}++;
       if($taxa{$t}{$_} > 1){
         logmsg "WARNING: taxon $_ was found more than once in $t";
       }
     }
   }
+  @taxa=uniq(sort {$a cmp $b } @taxa);
 
   # Do any of the trees show differences?
   if($$settings{diff}){
     my %refTaxa=%{ $taxa{$tree[0]} };
     my $refNumTaxa=scalar(keys(%refTaxa));
 
-    for(my $i=1;$i<@tree;$i++){
+    #TODO figure out a better way for multiple comparisons
+    # but for now we will just do two trees.
+    #my $numTrees=2;
+    my %diff;
+
+    # header
+    print "\nDIFF\n";
+    print join("\t",@tree)."\n";
+    my $numTreeHeader="";
+    $numTreeHeader.="numTaxa=".scalar( keys(%{$taxa{$_}}) ) ."\t" for(@tree);
+    $numTreeHeader=~s/\t$//;
+    print $numTreeHeader."\n";
+
+    for(my $i=1;$i<$numTrees;$i++){
       my @queryTaxa=keys(%{$taxa{$tree[$i]}});
-      if($refNumTaxa != @queryTaxa){
-        logmsg "Number of taxa in $tree[$i] (".scalar(@queryTaxa).") does not match the number of taxa in $tree[0] ($refNumTaxa)";
-      }
 
       # Find extra taxa
       for my $taxon(@queryTaxa){
         if(!$refTaxa{$taxon}){
-          logmsg "Found in $tree[$i] but not $tree[0]: $taxon";
+          $diff{$taxon}{$tree[$i]}=$taxon;
+          $diff{$taxon}{$tree[0]}="*";
         }
       }
 
@@ -63,11 +79,22 @@ sub main{
       @queryTaxa{@queryTaxa}=(1) x scalar(@queryTaxa);
       for my $refTaxon(keys(%refTaxa)){
         if(!$queryTaxa{$refTaxon}){
-          logmsg "Reference taxon $refTaxon not found in $tree[$i]";
+          $diff{$refTaxon}{$tree[$i]}="*";
+          $diff{$refTaxon}{$tree[0]}=$refTaxon;
         }
       }
     }
-    
+
+    for my $taxon(@taxa){
+      my $diffLine="";
+      for my $tree(@tree){
+        $diff{$taxon}{$tree}//=$taxon;
+        $diffLine.=$diff{$taxon}{$tree}."\t";
+      }
+      $diffLine=~s/\t$//;
+      print $diffLine."\n";
+    }
+
   } 
   
   return 0;
