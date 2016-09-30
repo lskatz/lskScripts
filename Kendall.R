@@ -1,17 +1,6 @@
 #!/usr/bin/env Rscript
 
-# Libraries
-library(stringr,quietly=TRUE)
-library(treescape,quietly=TRUE)
-library(phangorn,quietly=TRUE)
 library(docopt,quietly=TRUE)
-library(ips,quietly=TRUE)
-library(ggplot2,quietly=TRUE)
-
-# These libraries are still noisy despite the quietly parameter
-suppressMessages(
-  library(tools, quietly=TRUE)
-)
 
 logmsg <- function(msg){
   cat(paste(c("Kendall.R:",msg),sep=""),"\n", file=stderr())
@@ -40,6 +29,7 @@ All results are printed to stdout.
                      Implies --background
     --plot           Generate a plot of the background distribution of Kendall vs observed value.
                      Implies --background
+    --rootnode=<i>   Perform a root at this node. 0 for midpoint root. [Default: 0]
 
   Examples:
     Kendall.R --rep 1000 trees/*.dnd | column -t
@@ -50,6 +40,16 @@ All results are printed to stdout.
 
 # Script options
 opts <- docopt(doc)
+
+# Libraries
+# These libraries are still noisy despite the quietly parameter
+suppressMessages(library(stringr,quietly=TRUE))
+suppressMessages(library(treescape,quietly=TRUE))
+suppressMessages(library(phangorn,quietly=TRUE))
+suppressMessages(library(ips,quietly=TRUE))
+suppressMessages(library(ggplot2,quietly=TRUE))
+suppressMessages(library(tools,quietly=TRUE))
+
 treefiles <- c(opts$REFERENCE_TREE,opts$QUERY_TREE)
 # Which values of lambda to calculate with? Values can be 0 to 1.
 lambda <- as.double(opts$lambda)
@@ -130,7 +130,7 @@ plotBackground <- function(distribution, observed){
   return(my_histogram)
 }
 
-readyTreeForComparison <- function(treefile){
+readyTreeForComparison <- function(treefile,root.node=0){
   # Read tree
   my_tmptree <- read.tree(file = treefile)
 
@@ -151,7 +151,19 @@ readyTreeForComparison <- function(treefile){
   # Removing all NAs should be fine because the preexisting NAs have already been converted.
   #my_tmptree$node.label <- my_tmptree$node.label[!is.na(my_tmptree$node.label)]
   # midpoint root
-  my_tmptree <- midpoint(my_tmptree)
+  if(root.node==0){
+    my_tmptree <- midpoint(my_tmptree)
+  } else {
+    # Root it according to the user's parameter. 
+    # A nuance is that the root length has to be zero to 
+    # be considered rooted according to the documentation.
+    clade <- strsplit(root.node,',')[[1]]
+    if(!is.monophyletic(my_tmptree,clade)){
+      stop("ERROR: the outgroup",paste(clade,sep=",")," is not monophyletic on ",treefile)
+    }
+    my_tmptree <- root(my_tmptree,clade,resolve.root=TRUE)
+    my_tmptree$root.edge <- 0
+  }
   # Sort polytomies
   my_tmptree <- reorder(my_tmptree, order="cladewise", index.only=FALSE)
   
@@ -177,7 +189,7 @@ for(f in 1:ntrees) {
   logmsg(c("Reading",treefiles[f]));
 
   #make it compatible with Kendall-Colijn
-  mytrees[f] <- readyTreeForComparison(treefiles[f])
+  mytrees[f] <- readyTreeForComparison(treefiles[f],opts$rootnode)
 
   write.tree(mytrees[f][[1]], file=paste(basename,".flattened.dnd",sep=""))
 }
