@@ -6,13 +6,18 @@
 use strict;
 use warnings;
 use Getopt::Long;
+use File::Basename qw/fileparse/;
+
+my @fastaExt=qw(.fasta .ffn .fas .fna .faa .mfa);
+my @gbkExt=qw(.gbk .gb .gbf .embl);
 
 my $settings={
   errorcode_good=>0,
   errorcode_notFound=>1,
 };
 
-local $SIG{'__DIE__'} = sub { my $e = $_[0]; $e =~ s/(at [^\s]+? line \d+\.$)/\nStopped $1/; die("$0: ".(caller(1))[3].": ".$e); };
+sub logmsg { local $0=fileparse $0; print STDERR "$0: @_\n";}
+local $SIG{'__DIE__'} = sub {local $0=fileparse $0; my $e = $_[0]; $e =~ s/(at [^\s]+? line \d+\.$)/\nStopped $1/; die("$0: ".(caller(1))[3].": ".$e); };
 exit(main());
 
 sub main{
@@ -24,9 +29,16 @@ sub main{
   my $db=$$settings{database} or die "Error: need database\n". usage();
   my @db=split(/\s*,\s*/,$db);
 
-  my $fasta;
+  my $fasta="";
   for my $d(@db){
-    $fasta=fastacmdWithGrep($search,$d,$settings);
+    my($name,$path,$ext)=fileparse($d,@fastaExt,@gbkExt);
+    if(grep(/$ext/,@fastaExt)){
+      $fasta=fastacmdWithGrep($search,$d,$settings);
+    }elsif(grep(/$ext/,@gbkExt)){
+      $fasta=fastacmdWithGrepGbk($search,$d,$settings);
+    }else{
+      die "ERROR: I do not understand the extension on $d";
+    }
     last if($fasta);
   }
   print $fasta;
@@ -37,14 +49,17 @@ sub main{
 
 sub fastacmdWithGrep{
   my($search,$db,$settings)=@_;
-  my $fasta;
+  my $fasta="";
 
   my $grepParam="-m 1 -n";
   $grepParam.=" -i" if($$settings{insensitive});
   my $command="grep $grepParam '$search' '$db' 2>&1|cut -f 1 -d \":\"";
   my $lineNumber=`$command`;
   return fastacmd($search,$db,$settings) if($? || $!);
-  return "" if(!$lineNumber);
+  if(!$lineNumber){
+    logmsg "WARNING: could not find search $search in $db";
+    return $fasta;
+  }
   
   my $i=0;
   open(DB,$db) or die "Could not open database $db because $!\n".usage();
@@ -60,6 +75,34 @@ sub fastacmdWithGrep{
   }
   return $fasta;
 }
+
+sub fastacmdWithGrepGbk{
+  my($search,$db,$settings)=@_;
+  my $gbk="";
+
+  my $grepParam="-m 1";
+  $grepParam.=" -i" if($$settings{insensitive});
+  my $command="grep -n LOCUS '$db' | grep $grepParam '$search' 2>&1|cut -f 1 -d \":\"";
+  my $lineNumber=`$command`;
+
+  if(!$lineNumber){
+    logmsg "WARNING: Could not find $search in $db";
+    return $gbk;
+  }
+  
+  my $i=1;
+  open(DB,$db) or die "Could not open database $db because $!\n".usage();
+  while(<DB>){
+    $i++;
+    next if($i<$lineNumber);
+    last if($i-1 > $lineNumber && /^\s*LOCUS/);
+    $gbk.=$_;
+  }
+  close DB;
+  $gbk=~s/^\s*|\s*$//g;
+  return $gbk;
+}
+  
 
 sub fastacmd{
   my($search,$db,$settings)=@_;
@@ -83,13 +126,15 @@ sub fastacmd{
 }
 
 sub usage{
-  "
-Finds a sequence in a fasta file and prints it  
-perl $0 -s search -d database
-  -s search term in the defline.
-    search can also be from stdin
-  -d fasta file to search
-    comma-separated databases if multiples
-  -i case-insensitive
+  local $0=fileparse $0;
+  "\n\n  Finds a sequence in a fasta file and prints it. Searches
+  contig names if gbk; searches deflines if fasta.
+  
+  Usage: $0 -s search -d database
+  -s  '' search term in the defline.
+         search can also be from stdin
+  -d  '' fasta or gbk file to search
+         comma-separated databases if multiples
+  -i     case-insensitive
 ";
 }
