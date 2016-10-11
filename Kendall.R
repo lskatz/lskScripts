@@ -172,6 +172,55 @@ readyTreeForComparison <- function(treefile,root.node=0){
   
 }
 
+# I took the latest code from IPS so that the node
+# labels were not broken
+# https://github.com/heibl/ips/blob/248432094daf39da0cda373a942de41cf54ff99c/R/collapseUnsupportedEdges.R
+collapseUnsupportedEdges <- function(phy, value, cutoff){
+  
+  if ( !inherits(phy, "phylo") ) 
+    stop ("'phy' is not of class 'phylo'")
+  
+  if ( missing(value) ) value <- "node.label"
+  
+  stat <- as.numeric(phy[[value]])
+  nt <- Ntip(phy)
+  root.node <- nt + 1
+  collapse <- which(stat < cutoff) + nt
+  ## the root node cannot be collapsed:
+  collapse <- setdiff(collapse, root.node)
+  
+  ## collapse nodes in post-order traversal!!
+  ## ----------------------------------------
+  for ( i in rev(collapse) ){
+    
+    #i <- rev(collapse)[1] # FOR DEBUGGING
+    
+    ## identify edges
+    id <- phy$edge[, 2] == i
+    id2 <- phy$edge[, 1] == i
+    
+    ## modify: node values
+    #phy$node.label <- phy$node.label[!id]
+    
+    ## modify: edges
+    phy$edge[id2, 1] <- phy$edge[id, 1]
+    phy$edge <- phy$edge[!id, ]
+    phy$edge[phy$edge > i] <- phy$edge[phy$edge > i] - 1
+    
+    ## modify: edge lengths
+    phy$edge.length[id2] <- phy$edge.length[id2] + phy$edge.length[id]
+    phy$edge.length <- phy$edge.length[!id]
+    
+    ## modify: node labels
+    phy[["node.label"]] <- phy[["node.label"]][-(i - nt)]
+    
+    ## modify: number of internal nodes
+    phy$Nnode <- phy$Nnode - 1
+    
+  }
+  phy
+}
+
 ## END Functions
 ####################
 
