@@ -46,7 +46,7 @@ sub main{
   }
 
   # Check executables
-  for my $exe (qw(treedist randTrees.pl)){
+  for my $exe (qw(randTrees.pl)){
     system("which $exe >/dev/null 2>&1");
     die "ERROR: I did not find $exe in your PATH" if $?;
   }
@@ -55,7 +55,7 @@ sub main{
 
   print join("\t",qw(Ref Query num obs avg stdev Z p))."\n";
   for my $query(@query){
-    my $stat=bioPhyloDist($ref,$query,$$settings{method},$settings);
+    my $stat=bioPhyloDist($query,$ref,$$settings{method},$settings);
 
     # Round to two decimal places for most things
     $$stat{$_}=sprintf("%0.4f",$$stat{$_}) for(qw(obs avg stdev Z));
@@ -70,7 +70,7 @@ sub main{
 }
 
 sub bioPhyloDist{
-  my($ref,$query,$method,$settings)=@_;
+  my($query,$ref,$method,$settings)=@_;
 
   # First find the observed value.
   # The tree might be multifurcating and therefore might give a non-zero
@@ -79,7 +79,7 @@ sub bioPhyloDist{
   my $tries=0;
   do{
     $obs=observedScore($query,$ref,$method,$settings);
-    if($tries++ > 1000){
+    if($tries++ > 10000){
       die "ERROR: tried to get a zero self vs self score for $ref but couldn't after $tries tries. The tree might be too multifurcating. Force bifurcation and try again";
     }
   } while($ref eq $query && $obs != 0);
@@ -126,15 +126,15 @@ sub bioPhyloDist{
 }
 
 sub randScores{
-  my($baseTree,$ref,$method,$numTrees,$settings)=@_;
+  my($query,$ref,$method,$numTrees,$settings)=@_;
 
   my $refObj=Bio::Phylo::IO->parse(
     -format=>"newick",
     -file=>$ref,
   )->first;
 
-  logmsg "Making random trees from $baseTree";
-  my @newickString=`randTrees.pl $baseTree --force-binary --numcpus 1 --numtrees $numTrees 2>/dev/null`;
+  logmsg "Making random trees from $query";
+  my @newickString=`randTrees.pl $query --force-binary --numcpus 1 --numtrees $numTrees 2>/dev/null`;
   die "ERROR with randTrees.pl: $!" if $?;
 
   logmsg "Comparing random trees against $ref";
@@ -169,6 +169,13 @@ sub observedScore{
     #my $midpointNode=$_->get_midpoint();
     #$_->reroot($midpointNode);
     #$_=$_->deroot();
+  }
+
+  # Set the tree objects equal to each other if the 
+  # file paths are the same. Therefore the resolve()
+  # function would result in the same tree.
+  if($query eq $ref){
+    $queryObj=$refObj;
   }
 
   #logmsg "$refObj $queryObj";
