@@ -42,17 +42,14 @@ sub main{
 
 sub countAdaptersInFastq{
   my($fastq,$adapterSeq)=@_;
-  my @adapterName=keys(%$adapterSeq);
-  my @adapterSeq=values(%$adapterSeq);
-  my $numAdapters=@adapterName;
 
-  my %numAdapter = map{$_=>0} @adapterName;
+  my %numAdapter = map{$_=>0} keys %$adapterSeq;
   open(FASTQ,"zcat $fastq | ") or die "ERROR: could not read $fastq: $!";
   while(my $id=<FASTQ>){
-    my $read=uc(<FASTQ>);
-    for(my $i=0;$i<$numAdapters;$i++){
-      if($read=~/$adapterSeq[$i]/){
-        $numAdapter{$adapterName[$i]}++;
+    my $read=<FASTQ>;
+    while(my($adapterName,$adapterSequence)=each(%$adapterSeq)){
+      if(index(uc $read,$adapterSequence) != -1){
+        $numAdapter{$adapterName}++;
       }
     }
     # Burn two lines
