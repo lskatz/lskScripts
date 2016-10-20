@@ -9,11 +9,14 @@
 
 use strict;
 use warnings;
-use Getopt::Long;
-use Data::Dumper;
+use Getopt::Long qw/GetOptions/;
+use Data::Dumper qw/Dumper/;
 use File::Basename qw/basename fileparse/;
 use List::Util qw/max/;
+use IO::Uncompress::Gunzip qw/gunzip/;
 
+# http://perldoc.perl.org/perlop.html#Symbolic-Unary-Operators
+# +Inf and -Inf will be a binary complement of all zeros
 use constant MAXINT =>  ~0;
 use constant MININT => -~0;
 
@@ -24,26 +27,50 @@ exit main();
 
 sub main{
   my $settings={};
-  GetOptions($settings,qw(help kmerlength|kmer=i delta=i gt|greaterthan=i hist|histogram=s)) or die $!;
+  GetOptions($settings,qw(help kmerlength|kmer=i delta=i gt|greaterthan=i hist|histogram=s valleys! peaks!)) or die $!;
   $$settings{kmerlength}||=21;
   $$settings{delta}     ||=100;
   $$settings{gt}        ||=0;
+
+  $$settings{peaks}     //=0;
+  $$settings{valleys}   //=1;
 
   my($fastq)=@ARGV;
   die usage() if(!$fastq || $$settings{help});
   die "ERROR: I could not find fastq at $fastq" if(!-e $fastq);
 
-  print join("\t",qw(kmer count))."\n";
-
+  # Find peaks and valleys, but use the histogram file if it exists
+  # and if the user specified it.
   my $histogram=[];
   if($$settings{hist} && -e $$settings{hist}){
+    # Read the cached histogram file
     $histogram=readHistogram($$settings{hist},$settings);
   } else {
+    # Count kmers and make a histogram.  kmerToHist()
+    # will optionally write the histogram file.
     my $kmercount=countKmers($fastq,$$settings{kmerlength},$settings);
     $histogram=kmerToHist($kmercount,$settings);
   }
-  my $valley   =findTheValley($histogram,$$settings{delta},$settings);
-  print join("\t",@$valley)."\n";
+  # Find peaks and valleys using the simplified 
+  # 'delta' algorithm.
+  my $peaks=findThePeaksAndValleys($histogram,$$settings{delta},$settings);
+
+  # Configure the output
+  my @outputPos=();
+  push(@outputPos, @{$$peaks{valleys}}) if($$settings{valleys});
+  push(@outputPos, @{$$peaks{peaks}})   if($$settings{peaks});
+  @outputPos=sort {$$a[0] <=> $$b[0]} @outputPos;
+
+  if(!@outputPos){
+    logmsg "WARNING: no peaks or valleys were reported";
+  }
+
+  # Header for output table
+  print join("\t",qw(kmer count))."\n";
+  # Finish off the table of output.
+  for my $position (@outputPos){
+    print join("\t",@$position)."\n";
+  }
 
   return 0;
 }
@@ -72,12 +99,12 @@ sub countKmers{
   my($fastq,$kmerlength,$settings)=@_;
   my %kmer=();
 
-  # pure perl to make this standalone
-  #open(FASTQ,"<", $fastq) or die "ERROR: could not read $fastq: $!";
-  open(FASTQ,"zcat $fastq | ") or die "ERROR: could not read $fastq: $!";
+  # Pure perl to make this standalone... the only reason
+  # we are counting kmers in Perl instead of C.
+  my $fastqFh=openFastq($fastq,$settings);
   my $i=0;
-  while(my $id=<FASTQ>){
-    my $seq=<FASTQ>;
+  while(<$fastqFh>){ # burn the read ID line
+    my $seq=<$fastqFh>;
     chomp($seq);
     my $numKmersInRead=length($seq)-$kmerlength+1;
 
@@ -88,11 +115,11 @@ sub countKmers{
     }
 
     # Burn the quality score lines
-    <FASTQ>;
-    <FASTQ>;
+    <$fastqFh>;
+    <$fastqFh>;
 
   }
-  close FASTQ;
+  close $fastqFh;
 
   return \%kmer;
 }
@@ -123,7 +150,7 @@ sub kmerToHist{
   return \@hist;
 }
 
-sub findTheValley{
+sub findThePeaksAndValleys{
   my($hist, $delta, $settings)=@_;
 
   my($min,$max)=(MAXINT,MININT);
@@ -162,29 +189,82 @@ sub findTheValley{
         push(@minTab,[$minPos,$min]);
         $max=$countOfCounts;
         $maxPos=$kmerCount;
+        $lookForMax=1;
       }
     }
 
     last if($numZeros > 3);
   }
 
-  return $minTab[0];
+  return {peaks=>\@maxTab, valleys=>\@minTab};
+}
+
+sub findTheValley{
+  my($peak1,$peak2,$hist,$settings)=@_;
+
+  my $valley=$$peak1[1];
+  my $kmerCount=$$peak1[0];
+  for(my $i=$$peak1[0]+1;$i<=$$peak2[0];$i++){
+    if($valley < $$hist[$i]){
+      $valley=$$hist[$i];
+      $kmerCount=$i;
+    } else {
+      last;
+    }
+  }
+  
+  return [$kmerCount,$valley];
+}
+
+# Opens a fastq file in a smart way
+sub openFastq{
+  my($fastq,$settings)=@_;
+
+  my $fh;
+
+  my @fastqExt=qw(.fastq.gz .fastq .fq.gz .fq);
+  my($name,$dir,$ext)=fileparse($fastq,@fastqExt);
+
+  # Open the file in different ways, depending on if it
+  # is gzipped or if the user has gzip installed.
+  if($ext =~/\.gz$/){
+    # use binary gzip if we can... why not take advantage
+    # of the compiled binary's speedup?
+    if(-e "/usr/bin/gzip"){
+      open($fh,"gzip -cd $fastq | ") or die "ERROR: could not open $fastq for reading!: $!";
+    }else{
+      $fh=new IO::Uncompress::Gunzip($fastq) or die "ERROR: could not read $fastq: $!";
+    }
+  } else {
+    open($fh,"<",$fastq) or die "ERROR: could not open $fastq for reading!: $!";
+  }
+  return $fh;
 }
 
 
 sub usage{
-  "$0: Find the valley between two peaks on a set of kmers
+  "
+  $0: 
+       Find the valley between two peaks on a set of kmers
        such that you can discard the kmers that are 
        likely representative of contamination.
-  Usage: $0 file.fastq.gz
+       This script does not require any dependencies.
+
+  Usage: $0 file.fastq[.gz]
   --gt     0   Look for the first peak at this kmer count
                and then the next valley.
   --kmer   21  kmer length
   --delta  100 How different the counts have to be to
                detect a valley or peak
+
+  OUTPUT
   --hist   ''  A file to write the histogram, or a file
                to read the histogram if it already exists.
                Useful if you want to rerun this script.
+  --valleys,   Valleys will be in the output by default
+  --novalleys
+  --peaks,     Maximum peaks will not be in the output
+  --nopeaks    by default
   "
 }
 
