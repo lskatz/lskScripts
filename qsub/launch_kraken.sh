@@ -8,8 +8,10 @@
 # The aspen module for kraken is broken, and so I just have
 # to assume Kraken is in the path.
 
-#source /etc/profile.d/modules.sh
+source /etc/profile.d/modules.sh
 #module load kraken/0.10.4
+module load kraken/0.10.5
+module load krona/2.5
 
 function logmsg () {
   script=$(basename $0);
@@ -20,7 +22,7 @@ function run () {
   script=$(basename $0);
   logmsg "Running $@"
   eval $@
-  if [ $? -gt 0 ]; then logmsg "ERROR with previous command"; fi;
+  if [ $? -gt 0 ]; then logmsg "ERROR with previous command"; exit 1; fi;
 }
 
 NSLOTS=${NSLOTS-1}
@@ -37,6 +39,10 @@ fi;
 HTML=$1; shift;
 READS=$@;
 
+if [ -e $HTML ]; then
+  echo "ERROR: html file $HTML already exists! I will not overwrite it."
+  exit 1;
+fi
 
 # Where are my executables?
 KRAKENDIR=$(dirname $(which kraken));
