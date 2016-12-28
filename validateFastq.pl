@@ -159,5 +159,7 @@ sub usage{
   Examples:
     zcat reads.fastq.gz | $0
     $0 < reads.fastq
+  Validate many at once with xargs:
+    ls *.fastq.gz | xargs -P 8 -n 1 bash -c 'zcat $0 | validateFastq.pl || echo \"ERROR with $0\";'
     "
 }
