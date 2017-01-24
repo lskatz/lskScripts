@@ -5,6 +5,7 @@ use Bio::Tree::RandomFactory;
 use Bio::TreeIO;
 use Getopt::Long;
 use File::Basename qw/basename/;
+use File::Temp qw/tempfile/;
 use Data::Dumper qw/Dumper/;
 use List::Util qw/min max shuffle/;
 use List::MoreUtils qw/uniq/;
@@ -22,7 +23,7 @@ exit main();
 
 sub main{
   my $settings={};
-  GetOptions($settings,qw(help numTrees=i numcpus=i force-binary)) or die $!;
+  GetOptions($settings,qw(help outdir=s numTrees=i numcpus=i force-binary)) or die $!;
   $$settings{numTrees}||=1;
   $$settings{numcpus}||=1;
   $$settings{'force-binary'}||=0;
@@ -98,7 +99,13 @@ sub randTreeWorker{
     for(@printBuffer){
       $numTrees++;
       last if($numTrees > $$settings{numTrees});
-      print $_;
+      if($$settings{outdir}){
+        my($fh,$filename)=tempfile("rand.XXXXXX", DIR=>$$settings{outdir}, SUFFIX=>".dnd");
+        print $fh $_;
+        close $fh;
+      } else {
+        print $_;
+      }
     }
   }
 
@@ -132,6 +139,8 @@ sub usage{
   Min/max of all tree branch lengths will be used.
   A list of all unique taxon names will be used.
   Usage: $0 realtree.dnd [realtree2.dnd...]
+  --outdir            ''   (optional) Output all trees into
+                           a directory, one file per tree
   --numTrees           1   How many trees to produce
   --numcpus            1   Cpus to use
   --force-binary           Forces a binary tree: contracts
