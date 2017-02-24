@@ -1,6 +1,5 @@
 #!/usr/bin/env perl
 
-
 use strict;
 use warnings;
 use Getopt::Long;
@@ -138,7 +137,8 @@ sub makeTree{
 
 sub usage{
   "$0: creates a tree using mlst profiles directly from the tseemann mlst software.
-  Usage: $0 --scheme scheme.fna mlst.tsv > tree.dnd
-    Where scheme.fna is a folder with the MLST scheme
+  Usage: $0 --scheme scheme mlst.tsv > tree.dnd
+    Where scheme is a folder with the MLST scheme.
+    Run `mlst --help` for more information about the datadir parameter
   "
 }
