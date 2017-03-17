@@ -10,6 +10,8 @@ use File::Spec;
 
 use Bio::SeqIO;
 
+my @primer3PrimerHeader=("#", "sequence", "1-based start", "ln", "#N", "GC%", "Tm", "self any_th", "self end_th", "hair-pin", "quality");
+
 local $0=basename $0;
 sub logmsg{print STDERR "$0: @_\n";}
 
@@ -50,10 +52,12 @@ sub main{
   my (undef, undef, undef, @genome)=split(/\t/, $header);
   my $numGenomes=@genome;
 
-  # Loop through each genomic site
+  # Loop through each genomic site. Print results.
+  print join("\t","Contig", "Pos", @primer3PrimerHeader,@primer3PrimerHeader)."\n";
   while(<$fh>){
     chomp;
     my($seqname, $pos)=split(/\t/, $_);
+    next if(!$pos);
 
     my @siteConfig;
     for(my $i=0;$i<$numFasta;$i++){
@@ -62,7 +66,20 @@ sub main{
     }
 
     # Run Primer3 on all genomes at the same site
-    primer3(\@siteConfig, $settings);
+    my $primer=primer3(\@siteConfig, $settings);
+    
+    print "$seqname\t$pos";
+    for my $primerHash (@{ $$primer{fwd} }){
+      for my $header(@primer3PrimerHeader){
+        print "\t".$$primerHash{$header};
+      }
+    }
+    for my $primerHash (@{ $$primer{rev} }){
+      for my $header(@primer3PrimerHeader){
+        print "\t".$$primerHash{$header};
+      }
+    }
+    print "\n";
 
   }
 
@@ -85,13 +102,56 @@ sub primer3{
     close $cFh;
   }
   close $allConfigFh;
-  die;
 
-  system("cd $primer3Dir && $$settings{primer3} < $allConfig > $primer3Dir/log");
+  # Cleanup of individual configs
+  for(@$configArray){
+    unlink $_;
+  }
+
+  system("cd $primer3Dir && $$settings{primer3} < ".basename($allConfig)." > log.txt");
   die "ERROR: with $$settings{primer3}" if $?;
 
+  my %primer;
+  for my $fwdFile(glob("$primer3Dir/*.for")){
+    my $revFile=$fwdFile;
+       $revFile=~s/for$/rev/;
+    my $fwdPrimer=parsePrimerFile($fwdFile,$settings);
+    my $revPrimer=parsePrimerFile($revFile,$settings);
+
+    push(@{ $primer{fwd} }, @$fwdPrimer);
+    push(@{ $primer{rev} }, @$revPrimer);
+  }
+
+  return \%primer;
 }
 
+sub parsePrimerFile{
+  my($file,$settings)=@_;
+
+  my @primer;
+
+  open(my $primerFh, $file) or die "ERROR: could not read $file: $!";
+
+  # Burn some header lines that aren't easily parsed
+  my $acceptableLine=<$primerFh>; # e.g., ACCEPTABLE LEFT PRIMERS
+  while(<$primerFh>){
+    s/^\s+|\s+$//g;  #whitespace trim
+    last if(/^#/);
+  }
+
+  # The actual header I want
+  my @header=@primer3PrimerHeader;
+  # Get primer values
+  while(<$primerFh>){
+    s/^\s+|\s+$//g;  #whitespace trim
+    my @F=split /\s+/;
+    my %F;
+    @F{@header}=@F;
+    push(@primer,\%F);
+  }
+
+  return \@primer;
+}
 
 sub primer3Config{
   my($fasta, $seqname, $pos, $settings)=@_;
@@ -100,25 +160,35 @@ sub primer3Config{
   my($paramFh, $paramFile)=tempfile("primer3Config.XXXXXX",DIR=>$$settings{tempdir}, SUFFIX=>".conf");
   my $param="$$settings{tempdir}/".basename($fasta).".txt";
 
-  # Get a subseq of the fasta. 500bp?
-  my $start=$pos-499;
-  my $end  =$pos+500;
+  # TODO guess the input format.  If it's not a standard
+  # sequence file, put out a warning that the table
+  # file needs to be the first argument.
 
+  # Since we are concatenating contigs, we'll need to know
+  # how much to offset each position depending on the
+  # contig name
+  my %seqStart=();
+
+  # Concatenate the sequences
   my $inseq=Bio::SeqIO->new(-file=>$fasta);
-  my $subseq="";
+  my $sequence="";
   while(my $seq=$inseq->next_seq){
-    if($seq->id eq $seqname){
-      $subseq=$seq->subseq($start, $end);
-      last;
-    }
+    $seqStart{$seq->id}=length($sequence) + 1; # 1-based
+    $sequence.=$seq->seq;
   }
   $inseq->close;
 
+  # Recalculate where the start position is, given the
+  # concatenated sequences.
+  # For example, a position of 15 on the first contig,
+  # the concatenated pos should be 1 (1 = 1 + 15 - 1)
+  my $concatenatedPos=$seqStart{$seqname} + $pos - 1;
+
   # Make the params file
   my %param=(
-    SEQUENCE_ID                       => join(":", basename($fasta,qw(.fasta)),$seqname,$start,$end),
-    SEQUENCE_TEMPLATE                 => $subseq,
-    SEQUENCE_TARGET                   => "500,1",
+    SEQUENCE_ID                       => join(":", basename($fasta,qw(.fasta)),$seqname,$pos),
+    SEQUENCE_TEMPLATE                 => $sequence,
+    SEQUENCE_TARGET                   => "$concatenatedPos,1",
     PRIMER_TASK                       => "pick_sequencing_primers",
     PRIMER_PICK_LEFT_PRIMER           => 1,
     PRIMER_PICK_INTERNAL_OLIGO        => 0,
@@ -127,7 +197,7 @@ sub primer3Config{
     PRIMER_MIN_SIZE                   => 18,
     PRIMER_MAX_SIZE                   => 23,
     PRIMER_MAX_NS_ACCEPTED            => 1, 
-    PRIMER_PRODUCT_SIZE_RANGE         => "75-500",
+    PRIMER_PRODUCT_SIZE_RANGE         => "200-800",
     P3_FILE_FLAG                      => 1,
     SEQUENCE_INTERNAL_EXCLUDED_REGION => "400,200",
     PRIMER_EXPLAIN_FLAG               => 1,
