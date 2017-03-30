@@ -16,28 +16,27 @@ exit main();
 
 sub main{
   my $settings={};
-  GetOptions($settings, qw(a=s b=s lt=f tempdir=s numcpus=i mauveJar=s help)) or die $!;
+  GetOptions($settings, qw(query=s ref=s lt=f tempdir=s numcpus=i mauveJar=s help)) or die $!;
   $$settings{numcpus}||=1;
   $$settings{lt}||=0.3;
   $$settings{lt} *= 1000000; # Mb to bp conversion
   $$settings{tempdir}||=tempdir("subtractContigs.XXXXXX", TMPDIR=>1, CLEANUP=>1);
 
-  my $contigsA=$$settings{a};
-  my $contigsB=$$settings{b};
+  my $contigsQuery=$$settings{query};
+  my $contigsRef=$$settings{ref};
   
-  die usage() if(!$contigsA || !$contigsB || $$settings{help});
+  die usage() if(!$contigsQuery || !$contigsRef || $$settings{help});
 
-  my $querySeq=mauve($contigsA, $contigsB, $settings);
+  my $querySeq=mauve($contigsQuery, $contigsRef, $settings);
 
   my $seqout=Bio::SeqIO->new(-format=>"fasta");
   $seqout->write_seq(values(%$querySeq));
 
-  #my $matches=blast($contigsA, $contigsB, $settings);
   return 0;
 }
 
 sub mauve{
-  my($contigsA, $contigsB, $settings)=@_;
+  my($contigsQuery, $contigsRef, $settings)=@_;
   
   # Detect where the Mauve.jar file is
   $$settings{mauveJar}||=findMauveJar($settings);
@@ -46,8 +45,8 @@ sub mauve{
 
   my $reference="$$settings{tempdir}/B.fasta";
   my $query    ="$$settings{tempdir}/A.fasta";
-  filterContigs($contigsA, $query    , $settings);
-  filterContigs($contigsB, $reference, $settings);
+  filterContigs($contigsQuery, $query    , $settings);
+  filterContigs($contigsRef, $reference, $settings);
   
   system("java -Xmx500m -cp $$settings{mauveJar} org.gel.mauve.contigs.ContigOrderer -output $tmpdir -ref $reference -draft $query --backbone-output='backbone' >&2 ");
   die if $?;
@@ -169,20 +168,23 @@ sub findMauveJar{
     }
   }
 
-  die "ERROR: could not find Mauve.jar";
+  die "ERROR: could not find Mauve.jar in PATH or CLASSPATH, and it was not supplied with --mauveJar";
 }
 
 sub usage{
   "$0: subtracts contigs found in b.fasta from a.fasta.
 
-  Usage: $0 -a a.fasta -b b.fasta > out.fasta
-  All contigs found in b.fasta will be filtered from the output
+  Usage: $0 -query query.fasta -ref ref.fasta > out.fasta
+  All contigs found in ref.fasta will be filtered from query.fasta
 
   --numcpus    1
-  --tempdir           One will be made by default
-  --mauveJar          This script will look for Mauve.jar
-                      in PATH and CLASSPATH
+  --tempdir    ''     One will be made by default
+  --mauveJar   ''     This script will look for Mauve.jar
+                      in PATH and CLASSPATH, but you can
+                      supply it instead with this arg.
   --lt         0.3    Don't compare contigs greater than
-                      this many megabases. 
+                      this many megabases. Do not output
+                      contigs greater than this many
+                      megabases.
   "
 }
