@@ -22,11 +22,13 @@ exit(main());
 
 sub main{
   die usage() if(@ARGV<1);
-  GetOptions($settings,qw(search=s database=s insensitive! help));
+  GetOptions($settings,qw(search=s database=s outputtype|ot=s insensitive! help)) or die $!;
   die usage() if($$settings{help});
-  my $search=$$settings{search} || <>;
+  $$settings{outputtype}||="";
+
+  my $search=$$settings{search} || $ARGV[0] || <>;
     chomp($search);
-  my $db=$$settings{database} or die "Error: need database\n". usage();
+  my $db=$$settings{database} || $ARGV[1] or die "Error: need database\n". usage();
   my @db=split(/\s*,\s*/,$db);
 
   my $fasta="";
@@ -40,6 +42,13 @@ sub main{
       die "ERROR: I do not understand the extension on $d";
     }
     last if($fasta);
+  }
+
+  if(!$$settings{outputtype}){
+
+  } elsif($$settings{outputtype}=~/seq/i){
+    $fasta=~s/.+\n//m; # remove the first line
+    $fasta=~s/\s+//g;  # remove whitespace
   }
   print $fasta;
 
@@ -131,10 +140,12 @@ sub usage{
   contig names if gbk; searches deflines if fasta.
   
   Usage: $0 -s search -d database
+  alt usage: $0 search database
   -s  '' search term in the defline.
          search can also be from stdin
   -d  '' fasta or gbk file to search
          comma-separated databases if multiples
   -i     case-insensitive
+  -o  '' Output type: '' for unaltered or seq for sequence with no newlines
 ";
 }
