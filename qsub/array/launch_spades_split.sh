@@ -4,6 +4,7 @@
 
 # Read ARGV
 READS=$@
+SLOTS_PER_JOB=1 # manually change this as needed
 
 if [ "$READS" == "" ]; then
   echo "Assemble all reads in a directory from Illumina runs"
@@ -22,7 +23,7 @@ CTRL_FILE="$TMP/array.txt"
 echo "$READS" | tr ' ' '\n' | grep "_R1_" > $CTRL_FILE
 echo "CTRL_FILE is $CTRL_FILE"
 
-qsub -q all.q -N spades -o $TMP/log -j y -pe smp 1-99 -V -cwd -t 1-$(cat $CTRL_FILE | wc -l) \
+qsub -q all.q -N spades -o $TMP/log -j y -pe smp $SLOTS_PER_JOB -V -cwd -t 1-$(cat $CTRL_FILE | wc -l) \
   -v "CTRL_FILE=$CTRL_FILE" <<- "END_OF_SCRIPT"
   #!/bin/bash -l
   set -e
