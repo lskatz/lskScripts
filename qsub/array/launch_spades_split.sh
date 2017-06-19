@@ -20,15 +20,14 @@ echo "tmp dir is $TMP "
 #   filename  coverageLevel
 CTRL_FILE="$TMP/array.txt"
 echo "$READS" | tr ' ' '\n' | grep "_R1_" > $CTRL_FILE
+echo "CTRL_FILE is $CTRL_FILE"
 
-qsub -q all.q -N spades -o $TMP/log -j y -pe smp 1 -V -cwd -t 1-$(cat $CTRL_FILE | wc -l) \
-  "CTRL_FILE=$CTRL_FILE" <<- "END_OF_SCRIPT"
+qsub -q all.q -N spades -o $TMP/log -j y -pe smp 1-99 -V -cwd -t 1-$(cat $CTRL_FILE | wc -l) \
+  -v "CTRL_FILE=$CTRL_FILE" <<- "END_OF_SCRIPT"
   #!/bin/bash -l
-
   set -e
   module load SPAdes
 
-  echo "spades will be run on $(hostname)"
   which spades.py
 
   # Set up filenames
@@ -37,10 +36,22 @@ qsub -q all.q -N spades -o $TMP/log -j y -pe smp 1 -V -cwd -t 1-$(cat $CTRL_FILE
   tmpdir=/scratch/$USER
   mkdir -p $tmpdir
   outdir=$(mktemp --tmpdir=$tmpdir --directory SPAdes.XXXXXX);
-  trap {rm -rf $outdir} EXIT
-  newdir=$(dirname $R1)/$R1.spades
+  trap "rm -rf $outdir" EXIT
+  newdir=$(dirname $R1)/$(basename $R1 .fastq.gz).spades
 
-  spades.py -t $NSLOTS -1 $R1 -2 $R2 --careful -o $outdir
+  if [ -e "$newdir" ]; then
+    echo "ERROR: found pre-existing dir $newdir. Will not continue.";
+    exit 1
+  fi
+
+  echo "spades will be run on $(hostname)"
+  echo "R1/R2:"
+  echo "  $R1"
+  echo "  $R2"
+  echo "Working directory is $outdir"
+  echo "Final directory will be $newdir";
+
+  spades.py -t $NSLOTS -1 $R1 -2 $R2 -o $outdir --careful
 
   mv -v $outdir $newdir
 END_OF_SCRIPT
