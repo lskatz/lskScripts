@@ -41,23 +41,23 @@ sub bamMetrics{
 
     # Individual tags
     if($flag & 4){
-      $QC{unmapped}++;
+      $QC{'simple-unmapped'}++;
     }
     if(! $flag & 2){
-      $QC{improperPair}++;
+      $QC{'simple-improperPair'}++;
     }
     
     # Combination tags
     if($flag =~ /^(?:73|133|89|121|165|181|101|117|153|185|69|137)$/){
-      $QC{singletonMap}++;
+      $QC{'combination-singletonMap'}++;
     } elsif ($flag =~ /^(?:77|141)$/){
-      $QC{bothUnmapped}++;
+      $QC{'combination-bothUnmapped'}++;
     } elsif($flag =~ /^(?:99|147|83|163)$/){
-      $QC{bothProperPair}++;
+      $QC{'combination-bothProperPair'}++;
     } elsif($flag =~ /^(?:67|131|115|179)$/){
-      $QC{wrongOrientation}++;
+      $QC{'combination-wrongOrientationGoodInsertSize'}++;
     } elsif($flag =~ /^(?:81|161|97|145|65|129|113|177)$/){
-      $QC{wrongInsertSize}++;
+      $QC{'combination-mappedButWrongInsertSize'}++;
     }
   }
   return \%QC;
