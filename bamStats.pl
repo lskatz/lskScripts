@@ -13,13 +13,18 @@ exit main();
 
 sub main{
   my $settings={};
-  GetOptions($settings,qw(help)) or die $!;
+  GetOptions($settings,qw(help percent|percentage label=s)) or die $!;
   die usage() if($$settings{help});
   die usage() if(-t STDIN);
 
   my $QC=bamMetrics($settings);
 
   my @header=sort {$a cmp $b} keys(%$QC);
+
+  if($$settings{label}){
+    unshift(@header, 'label');
+    $$QC{label}=$$settings{label};
+  }
 
   print join("\t",@header)."\n";
   for my $header(@header){
@@ -33,9 +38,14 @@ sub main{
 sub bamMetrics{
   my($settings)=@_;
 
+  my $numReads=0;
   my %QC;
+  for(qw(simple-unmapped simple-improperPair combination-singletonMap combination-bothUnmapped combination-bothProperPair combination-wrongOrientationGoodInsertSize combination-mappedButWrongInsertSize)){
+    $QC{$_}=0;
+  }
 
   while(<>){
+    $numReads++;
     chomp;
     my($seqid, $flag, $rname, $pos, $mapQ, $cigar, $rnext, $pnext, $tlen, $seq, $qual) = split(/\t/, $_);
 
@@ -60,11 +70,19 @@ sub bamMetrics{
       $QC{'combination-mappedButWrongInsertSize'}++;
     }
   }
+
+  if($$settings{percent}){
+    for my $metric(keys(%QC)){
+      $QC{$metric} = sprintf("%0.2f", $QC{$metric}/$numReads*100);
+    }
+  }
+
   return \%QC;
 }
 
 sub usage{
   "$0: get QC information on a sam file
   Usage: samtools view file.bam | $0
+  --percent       View results in percentages
   "
 }
