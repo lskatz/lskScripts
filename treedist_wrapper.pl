@@ -53,6 +53,9 @@ sub main{
 
   logmsg "Temporary dir is $$settings{tempdir}";
 
+  # Do the trees have the same taxa, etc?
+  validateTrees($ref,\@query,$settings);
+
   print join("\t",qw(Ref Query num obs avg stdev Z p))."\n";
   for my $query(@query){
     my $stat=bioPhyloDist($query,$ref,$$settings{method},$settings);
@@ -67,6 +70,57 @@ sub main{
   }
 
   return 0;
+}
+
+sub validateTrees{
+  my($ref,$queryList,$settings)=@_;
+
+  logmsg "Validating trees...";
+
+  my $errorCount=0;
+
+  my $refObj=Bio::Phylo::IO->parse(
+    -format=>"newick",
+    -file=>$ref,
+  )->first;
+
+  my $taxa=$refObj->get_terminals();
+  my %taxonId;
+  for(@$taxa){
+    $taxonId{$_->get_name}=1;
+  }
+
+  for my $query(@$queryList){
+    my $queryObj=Bio::Phylo::IO->parse(
+      -format=>"newick",
+      -file=>$query,
+    )->first;
+
+    my @queryTaxonIds=map{$_->get_name} @{ $queryObj->get_terminals() };
+
+    # Check that all query IDs are in ref
+    my %queryTaxonId; # make an index
+    for my $queryTaxonId(@queryTaxonIds){
+      $queryTaxonId{$queryTaxonId}=1; # make an index
+      if(!$taxonId{$queryTaxonId}){
+        logmsg "ERROR: taxon $queryTaxonId is not in ref tree $ref";
+        $errorCount++;
+      }
+    }
+    # Check that all ref IDs are in query
+    for my $refTaxonId(keys(%taxonId)){
+      if(!$queryTaxonId{$refTaxonId}){
+        logmsg "ERROR: taxon $refTaxonId is not in query tree $query";
+        $errorCount++;
+      }
+    }
+  }
+
+  die "Exiting due to $errorCount errors" if($errorCount);
+
+  logmsg "Trees have been validated";
+
+  return 1;
 }
 
 sub bioPhyloDist{
@@ -143,7 +197,8 @@ sub randScores{
     my ($fh, $randQueryTree) = tempfile("randQuery.XXXXXX",DIR=>$$settings{tempdir},SUFFIX=>".dnd");
     print $fh $newick;
     close $fh;
-    push(@dist,observedScore($randQueryTree,$ref,$method,$settings));
+    my $dist=observedScore($randQueryTree,$ref,$method,$settings);
+    push(@dist,$dist);
   }
 
   return \@dist;
@@ -164,11 +219,6 @@ sub observedScore{
   for($queryObj,$refObj){
     # Break polytomies and make the tree binary.
     $_=$_->resolve()->deroot();
-
-    # midpoint root: makes the score not match Phylip
-    #my $midpointNode=$_->get_midpoint();
-    #$_->reroot($midpointNode);
-    #$_=$_->deroot();
   }
 
   # Set the tree objects equal to each other if the 
@@ -177,14 +227,6 @@ sub observedScore{
   if($query eq $ref){
     $queryObj=$refObj;
   }
-
-  #logmsg "$refObj $queryObj";
-  #if(!$refObj->is_binary()){
-  #  die "ERROR: the ref is not binary!\n  file: $ref\n  ".`cat $ref`;
-  #}
-  #if(!$queryObj->is_binary()){
-  #  die "ERROR: the query is not binary!\n  file: $query\n  ".`cat $query`;
-  #}
 
   # Find the score based on the method
   my $obs;
@@ -218,6 +260,7 @@ sub usage{
                      the same values as R-phangorn or Phylip-treedist.
   --numtrees  1000   How many random trees to compare against?
                      Use 0 to not run a statistical test.
+  --numcpus   1
   "
 }
 
