@@ -15,8 +15,9 @@ exit main();
 
 sub main{
   my $settings={};
-  GetOptions($settings,qw(help tsv=s verbose reroot!)) or die $!;
+  GetOptions($settings,qw(help tsv=s verbose reroot! min-taxa=i)) or die $!;
   $$settings{reroot}//=1;
+  $$settings{'min-taxa'}||=1;
   my @tree=@ARGV;
 
   die usage() if($$settings{help});
@@ -55,12 +56,22 @@ sub main{
 sub constraintTree{
   my($treeObj,$tsv,$settings)=@_;
 
+  my %return=(
+    baseTaxon=>"",
+    levelsFromRoot=>0,
+    Sn=>0,
+    Sp=>0,
+    Snsp=>0,
+    sisterTaxa=>[],
+    numTaxa=>0,
+  );
+
   if($$settings{reroot}){
     eval{
       reroot($treeObj);
     };
     if($@){
-      return {};
+      return \%return;
     }
   }
   my @node=();
@@ -68,7 +79,7 @@ sub constraintTree{
     @node=$treeObj->get_nodes;
   };
   if($@){
-    return {};
+    return \%return;
   }
 
   my $inclusion=inclusionStatus($tsv,$settings);
@@ -88,13 +99,8 @@ sub constraintTree{
   my $totalUnknowns =scalar(grep {$_->is_Leaf && $_->get_tag_values("outbreak")==-1} @node);
   my $numNodes=@node;
 
-  # now that "outbreak" has been applied, see Sn or Sp
+  # now that "outbreak" has been applied, calculate Sn or Sp
   my(%sn,%sp,%snsp);
-  # Also try to find the best Sn/Sp along the way
-  my $winningTaxon="";
-  my $winningLevel=0;
-  my $winningSnsp=0;
-  my $winningNode=""; # an ancestor, Bio::Tree::Node 
   for my $node(@node){
     # For each leaf node, go up the ancestory chain to
     # record Sn and Sp
@@ -103,13 +109,14 @@ sub constraintTree{
     my @ancestory=$treeObj->get_lineage_nodes($node);
     for(my $i=0;$i<@ancestory;$i++){
       # True positives, etc
-      my @descendent=$ancestory[$i]->get_Descendents;
-      my $TP = scalar(grep {$_->is_Leaf && $_->get_tag_values("outbreak")==1} @descendent);
-      my $FP = scalar(grep {$_->is_Leaf && $_->get_tag_values("outbreak")==0} @descendent);
+      my @descendent=grep{$_->is_Leaf} $ancestory[$i]->get_Descendents;
+      my $numDescendents=@descendent;
+      my $TP = scalar(grep {$_->get_tag_values("outbreak")==1} @descendent);
+      my $FP = scalar(grep {$_->get_tag_values("outbreak")==0} @descendent);
       my $TN = $totalNegatives - $FP;
       my $FN = $totalPositives - $TP;
-      my $unknowns=scalar(grep {$_->is_Leaf && $_->get_tag_values("outbreak")==-1} @descendent);
-      my $knowns  =scalar(grep {$_->is_Leaf && $_->get_tag_values("outbreak")!=-1} @descendent);
+      my $unknowns=scalar(grep {$_->get_tag_values("outbreak")==-1} @descendent);
+      my $knowns  =scalar(grep {$_->get_tag_values("outbreak")!=-1} @descendent);
 
       # Can't simply have a clade of unknowns
       next if($knowns < 1);
@@ -134,13 +141,20 @@ sub constraintTree{
       next if($sn{$node->id}[$i] < 0.01);
       next if($sp{$node->id}[$i] < 0.01);
 
-      if($snsp{$node->id}[$i] > $winningSnsp){
-        $winningTaxon=$node->id;
-        $winningLevel=$i;
-        $winningSnsp=$snsp{$node->id}[$i];
-        $winningNode=$ancestory[$i];
+      next if($numDescendents < $$settings{'min-taxa'});
+
+      if($snsp{$node->id}[$i] > $return{Snsp} 
+        || ($snsp{$node->id}[$i] == $return{Snsp} && $numDescendents > $return{numTaxa})
+      ){
+        $return{baseTaxon}=$node->id;
+        $return{levelsFromRoot}=$i;
+        $return{Snsp}=$snsp{$node->id}[$i];
+        $return{mrca}=$ancestory[$i];
+        $return{Sn}=$sn{$node->id}[$i];
+        $return{Sp}=$sp{$node->id}[$i];
+        $return{numTaxa}=$numDescendents;
         if($$settings{verbose}){
-          logmsg "Taxon $winningTaxon at level $winningLevel with score ".$snsp{$node->id}[$i]." and ".scalar(@descendent)." descendents. $unknowns unknowns in the clade.";
+          logmsg "Taxon $return{baseTaxon} at level $return{levelsFromRoot} with score $return{Snsp} and $return{numTaxa} descendents. $unknowns unknowns in the clade.";
         }
       }
     }
@@ -148,21 +162,13 @@ sub constraintTree{
   
   # Find all taxon names in the "best" clade
   my @sisterTaxa=();
-  if($winningNode){
-    @sisterTaxa = map{$_->id} grep{$_->is_Leaf} $winningNode->get_Descendents;
+  if($return{mrca}){
+    $return{sisterTaxa} = [map{$_->id} grep{$_->is_Leaf} $return{mrca}->get_Descendents];
   }
 
-  my %return=(
-    baseTaxon=>$winningTaxon, 
-    levelsFromRoot=>$winningLevel, 
-    Sn=>$sn{$winningTaxon}[$winningLevel], 
-    Sp=>$sp{$winningTaxon}[$winningLevel], 
-    Snsp=>$snsp{$winningTaxon}[$winningLevel], 
-    sisterTaxa=>\@sisterTaxa,
-  );
-  for(qw(Sn Sp Snsp)){
-    $return{$_}//=0;
-  }
+  #for(qw(Sn Sp Snsp)){
+  #  $return{$_}//=0;
+  #}
   return \%return;
 }
 
@@ -213,5 +219,6 @@ sub usage{
   Usage: $0 --tsv file.tsv tree1.dnd [tree2.dnd...]
   --verbose
   --noreroot    Do not midpoint root
+  --min-taxa  1 Number of taxa that must be in the target clade
   "
 }
