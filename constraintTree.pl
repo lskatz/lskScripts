@@ -15,35 +15,78 @@ exit main();
 
 sub main{
   my $settings={};
-  GetOptions($settings,qw(help tsv=s)) or die $!;
+  GetOptions($settings,qw(help tsv=s verbose reroot!)) or die $!;
+  $$settings{reroot}//=1;
   my @tree=@ARGV;
 
   die usage() if($$settings{help});
   die "ERROR: need tsv" if(!$$settings{tsv});
   die "ERROR: need trees" if(!@tree);
 
+  print join("\t",qw(file baseTaxon levelFromRoot numTaxa Sn Sp Score))."\n";
   for my $t(@tree){
+    if(!-e $t){
+      die "ERROR: tree file doesn't exist: $t";
+    }
+    if(-s $t < 1){
+      logmsg "Tree file is empty; skipping: $t";
+      next;
+    }
+    eval{
+      Bio::TreeIO->new(-file=>$t)->next_tree;
+    };
+    if($@){
+      logmsg "Could not read file $t; skipping";
+      next;
+    }
     my $in=Bio::TreeIO->new(-file=>$t);
     while(my $treeObj=$in->next_tree){
-      my $metrics=constraintTree($treeObj,$$settings{tsv},$settings);
-      die Dumper $metrics;
+      my $m=constraintTree($treeObj,$$settings{tsv},$settings);
+      if(!$$m{baseTaxon}){
+        logmsg "WARNING: skipping tree in $t";
+        next;
+      }
+      print join("\t",basename($t),$$m{baseTaxon},$$m{levelsFromRoot},scalar(@{$$m{sisterTaxa}}), $$m{Sn}, $$m{Sp}, $$m{Snsp})."\n";
     }
   }
 }
 
+
 sub constraintTree{
   my($treeObj,$tsv,$settings)=@_;
 
-  reroot($treeObj);
-
-  my $inclusion=inclusionStatus($tsv,$settings);
-  for my $node($treeObj->get_nodes){
-    next if(!$node->is_Leaf);
-    $node->set_tag_value("outbreak",$$inclusion{$node->id});
+  if($$settings{reroot}){
+    eval{
+      reroot($treeObj);
+    };
+    if($@){
+      return {};
+    }
+  }
+  my @node=();
+  eval{
+    @node=$treeObj->get_nodes;
+  };
+  if($@){
+    return {};
   }
 
-  my $totalPositives=scalar(grep {$_->is_Leaf && $_->get_tag_values("outbreak")==1} $treeObj->get_nodes);
-  my $totalNegatives=scalar(grep {$_->is_Leaf && $_->get_tag_values("outbreak")==0} $treeObj->get_nodes);
+  my $inclusion=inclusionStatus($tsv,$settings);
+  for my $node(@node){
+    next if(!$node->is_Leaf);
+    if(defined($$inclusion{$node->id})){
+      #die "ERROR: can't find ".$node->id." in inclusion spreadsheet";
+      $node->set_tag_value("outbreak",$$inclusion{$node->id});
+    } else {
+      $node->set_tag_value("outbreak",-1);
+      logmsg "Warning: unknown inclusion status for ".$node->id;
+    }
+  }
+
+  my $totalPositives=scalar(grep {$_->is_Leaf && $_->get_tag_values("outbreak")== 1} @node);
+  my $totalNegatives=scalar(grep {$_->is_Leaf && $_->get_tag_values("outbreak")== 0} @node);
+  my $totalUnknowns =scalar(grep {$_->is_Leaf && $_->get_tag_values("outbreak")==-1} @node);
+  my $numNodes=@node;
 
   # now that "outbreak" has been applied, see Sn or Sp
   my(%sn,%sp,%snsp);
@@ -51,7 +94,8 @@ sub constraintTree{
   my $winningTaxon="";
   my $winningLevel=0;
   my $winningSnsp=0;
-  for my $node($treeObj->get_nodes){
+  my $winningNode=""; # an ancestor, Bio::Tree::Node 
+  for my $node(@node){
     # For each leaf node, go up the ancestory chain to
     # record Sn and Sp
     next if(!$node->is_Leaf);
@@ -59,17 +103,34 @@ sub constraintTree{
     my @ancestory=$treeObj->get_lineage_nodes($node);
     for(my $i=0;$i<@ancestory;$i++){
       # True positives, etc
-      my $TP = scalar(grep {$_->is_Leaf && $_->get_tag_values("outbreak")==1} $ancestory[$i]->get_Descendents);
-      my $FP = scalar(grep {$_->is_Leaf && $_->get_tag_values("outbreak")==0} $ancestory[$i]->get_Descendents);
+      my @descendent=$ancestory[$i]->get_Descendents;
+      my $TP = scalar(grep {$_->is_Leaf && $_->get_tag_values("outbreak")==1} @descendent);
+      my $FP = scalar(grep {$_->is_Leaf && $_->get_tag_values("outbreak")==0} @descendent);
       my $TN = $totalNegatives - $FP;
       my $FN = $totalPositives - $TP;
+      my $unknowns=scalar(grep {$_->is_Leaf && $_->get_tag_values("outbreak")==-1} @descendent);
+      my $knowns  =scalar(grep {$_->is_Leaf && $_->get_tag_values("outbreak")!=-1} @descendent);
+
+      # Can't simply have a clade of unknowns
+      next if($knowns < 1);
 
       # Sensitivity and Specificity calculation
       $sn{$node->id}[$i]=$TP/($TP+$FN);
       $sp{$node->id}[$i]=$TN/($TN+$FP);
       $snsp{$node->id}[$i] = ($sn{$node->id}[$i]+$sp{$node->id}[$i])/2;
 
-      # I mean, why even bother if the score is super low
+      # Add a penalty for each unknown in the outbreak clade
+      $snsp{$node->id}[$i] = $snsp{$node->id}[$i] * ($knowns/($knowns+$unknowns));
+
+      # Format a few values
+      for($snsp{$node->id}[$i]){
+        $_=sprintf("%0.2f",$_);
+      }
+
+      # I mean, why even bother if the score is super low.
+      # Avoid a skewed score.
+      # TODO avoid a skewed score with some kind of
+      # exponential penalty.
       next if($sn{$node->id}[$i] < 0.01);
       next if($sp{$node->id}[$i] < 0.01);
 
@@ -77,12 +138,32 @@ sub constraintTree{
         $winningTaxon=$node->id;
         $winningLevel=$i;
         $winningSnsp=$snsp{$node->id}[$i];
-        logmsg $winningTaxon,$winningLevel,$winningSnsp,$TP,$FP,$TN,$FN;
+        $winningNode=$ancestory[$i];
+        if($$settings{verbose}){
+          logmsg "Taxon $winningTaxon at level $winningLevel with score ".$snsp{$node->id}[$i]." and ".scalar(@descendent)." descendents. $unknowns unknowns in the clade.";
+        }
       }
     }
   }
+  
+  # Find all taxon names in the "best" clade
+  my @sisterTaxa=();
+  if($winningNode){
+    @sisterTaxa = map{$_->id} grep{$_->is_Leaf} $winningNode->get_Descendents;
+  }
 
-  return {baseTaxon=>$winningTaxon, levelsFromRoot=>$winningLevel, Sn=>$sn{$winningTaxon}[$winningLevel], Sp=>$sp{$winningTaxon}[$winningLevel], Snsp=>$snsp{$winningTaxon}[$winningLevel]};
+  my %return=(
+    baseTaxon=>$winningTaxon, 
+    levelsFromRoot=>$winningLevel, 
+    Sn=>$sn{$winningTaxon}[$winningLevel], 
+    Sp=>$sp{$winningTaxon}[$winningLevel], 
+    Snsp=>$snsp{$winningTaxon}[$winningLevel], 
+    sisterTaxa=>\@sisterTaxa,
+  );
+  for(qw(Sn Sp Snsp)){
+    $return{$_}//=0;
+  }
+  return \%return;
 }
 
 sub inclusionStatus{
@@ -92,13 +173,12 @@ sub inclusionStatus{
   open(my $fh, $tsv) or die "ERROR: could not read $tsv: $!";
   while(<$fh>){
     chomp;
-    my ($dataset,$event,$isolateName,$sra_acc)=split /\t/;
-    $inclusion{$isolateName} = !!$event + 0; # force int
-    #if($event){
-    #  $inclusion{$isolateName}="true";
-    #} else {
-    #  $inclusion{$isolateName}="false";
-    #}
+    my ($isolateName,$bool)=split /\t/;
+    # Force a boolean integer: the !! is "not-not" which
+    # forces a 1 or empty value.  The plus 0 forces int.
+    # Therefore, any "true" value evaluates to 1 and 
+    # any "empty" value evaluates to 0.
+    $inclusion{$isolateName} = !!$bool + 0;
   }
   close $fh;
   return \%inclusion;
@@ -121,14 +201,17 @@ sub reroot{
       }
     }
   }
+  
   $tree->reroot_at_midpoint($outgroup,'MidpointRoot');
   return $outgroup;
 }
 
 sub usage{
   "$0: find sensitivity and specificity of a tree or trees, 
-  given a spreadsheet of inclusion/exclusion information
+  The spreadsheet must be two columns: taxon-name and boolean (1 or 0)
 
   Usage: $0 --tsv file.tsv tree1.dnd [tree2.dnd...]
+  --verbose
+  --noreroot    Do not midpoint root
   "
 }
