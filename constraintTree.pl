@@ -282,7 +282,19 @@ sub treeOutgroup{
     
     die "INTERNAL ERROR: somehow this tree bifurcates into clades with equally named leaves???";
   } $treeObj->get_root_node->each_Descendent;
+
+  for my $node(@secondaryNode){
+    my $numLeaves=scalar(grep{$_->is_Leaf} $node->get_all_Descendents);
+    if($numLeaves > 0){
+      return $node;
+    }
+  }
   
+  # TODO
+  # If there are no outgroup leaves, then 
+  # look at the other secondary nodes
+
+  #die "ERROR: no secondary node has leaves";
   return $secondaryNode[0];
 }
 
