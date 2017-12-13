@@ -15,14 +15,20 @@ exit main();
 
 sub main{
   my $settings={};
-  GetOptions($settings,qw(help tsv=s verbose reroot! min-taxa=i)) or die $!;
+  GetOptions($settings,qw(help tree|trees|treeout=s tsv=s verbose reroot! min-taxa=i)) or die $!;
   $$settings{reroot}//=1;
   $$settings{'min-taxa'}||=1;
+  $$settings{tree}||="";
   my @tree=@ARGV;
 
   die usage() if($$settings{help});
   die "ERROR: need tsv" if(!$$settings{tsv});
   die "ERROR: need trees" if(!@tree);
+
+  my $treeout;
+  if($$settings{tree}){
+    $treeout=Bio::TreeIO->new(-file=>">$$settings{tree}");
+  }
 
   print join("\t",qw(file baseTaxon levelsFromRoot numInClade Sn Sp Score outgroup))."\n";
   for my $t(@tree){
@@ -71,8 +77,20 @@ sub main{
       #print "\t".join(",",@{$m{outgroupTaxa}});
       print "\t".scalar(@{$m{outgroupTaxa}});
       print "\n";
+
+      if($$settings{tree}){
+        $treeout->write_tree($m{tree});
+      }
     }
   }
+  $treeout->close;
+
+  # add an extra newline for readability
+  open(my $fh, ">>", $$settings{tree}) or die $!;
+  print $fh "\n";
+  close $fh;
+  
+  return 0;
 }
 
 
@@ -86,6 +104,7 @@ sub constraintTree{
     Sp=>0,
     Snsp=>0,
     sisterTaxa=>[],
+    tree=>$treeObj,
     numTaxa=>0,
     outgroup=>treeOutgroup($treeObj,$settings),
   );
@@ -163,6 +182,7 @@ sub constraintTree{
 
       next if($numDescendents < $$settings{'min-taxa'});
 
+      my $treeCopy = Bio::Tree::Tree->new(-root=>$treeObj->get_root_node, -nodelete=>1);
       push(@resultCombination,{
         baseTaxon      => $node->id,
         levelsFromRoot => $i,
@@ -177,6 +197,7 @@ sub constraintTree{
         FN             => $FN,
         knowns         => $knowns,
         unknowns       => $unknowns,
+        tree           => $treeCopy,
       });
     }
   }
@@ -197,7 +218,7 @@ sub constraintTree{
     $$b{numTaxa} <=> $$a{numTaxa}
   } @resultCombination;
 
-  for(qw(Snsp Sn Sp numTaxa baseTaxon levelsFromRoot mrca TP FP TN FN knowns unknowns)){
+  for(qw(Snsp Sn Sp numTaxa baseTaxon levelsFromRoot mrca TP FP TN FN knowns unknowns tree)){
     $return{$_}=$sortedResults[0]{$_};
   }
 
@@ -304,8 +325,9 @@ sub usage{
 
   Usage: $0 --tsv file.tsv tree1.dnd [tree2.dnd...]
   --verbose
-  --noreroot    Do not try to root the tree every which way
-  --min-taxa  1 Number of taxa that must be in the target clade
+  --noreroot            Do not try to root the tree every which way
+  --min-taxa  1         Number of taxa that must be in the target clade
+  --trees     file.dnd  Place final rerooted tree(s) in this file
   "
 }
 
