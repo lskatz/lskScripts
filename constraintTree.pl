@@ -24,7 +24,7 @@ sub main{
   die "ERROR: need tsv" if(!$$settings{tsv});
   die "ERROR: need trees" if(!@tree);
 
-  print join("\t",qw(file baseTaxon levelFromRoot numInClade Sn Sp Score outgroup))."\n";
+  print join("\t",qw(file baseTaxon levelsFromRoot numInClade Sn Sp Score outgroup))."\n";
   for my $t(@tree){
     if(!-e $t){
       die "ERROR: tree file doesn't exist: $t";
@@ -64,11 +64,12 @@ sub main{
         next;
       }
 
-      @allResults = sort{$$b{Snsp} <=> $$a{Snsp} || $$b{Sn} <=> $$a{Sn} || $$b{Sp} <=> $$a{Sp}} @allResults;
-      my $m=$allResults[0]; # I don't feel like typing this whole variable name
-      print join("\t",basename($t), $$m{baseTaxon},$$m{levelsFromRoot},scalar(@{$$m{sisterTaxa}}), $$m{Sn}, $$m{Sp}, $$m{Snsp});
-      #print "\t".join(",",@{$$m{outgroupTaxa}});
-      print "\t".scalar(@{$$m{outgroupTaxa}});
+      # Sorted metrics array
+      my @m = sort{$$b{Snsp} <=> $$a{Snsp} || $$b{Sn} <=> $$a{Sn} || $$b{Sp} <=> $$a{Sp}} @allResults;
+      my %m=%{$m[0]}; # I don't feel like typing this whole variable name
+      print join("\t",basename($t), $m{baseTaxon},$m{levelsFromRoot},scalar(@{$m{sisterTaxa}}), $m{Sn}, $m{Sp}, $m{Snsp});
+      #print "\t".join(",",@{$m{outgroupTaxa}});
+      print "\t".scalar(@{$m{outgroupTaxa}});
       print "\n";
     }
   }
@@ -116,8 +117,7 @@ sub constraintTree{
   my $totalUnknowns =scalar(grep {$_->is_Leaf && $_->get_tag_values("outbreak")==-1} @node);
   my $numNodes=@node;
 
-  # now that "outbreak" has been applied, calculate Sn or Sp
-  my(%sn,%sp,%snsp);
+  my @resultCombination; # array of hashes
   for my $node(@node){
     # For each leaf node, go up the ancestory chain to
     # record Sn and Sp
@@ -142,15 +142,15 @@ sub constraintTree{
       next if($TN+$FP==0 || $TP+$FN==0);
 
       # Sensitivity and Specificity calculation
-      $sn{$node->id}[$i]=$TP/($TP+$FN);
-      $sp{$node->id}[$i]=$TN/($TN+$FP);
-      $snsp{$node->id}[$i] = ($sn{$node->id}[$i]+$sp{$node->id}[$i])/2;
+      my $sn    = $TP/($TP+$FN);
+      my $sp    = $TN/($TN+$FP);
+      my $snsp  = ($sn + $sp)/2;
 
       # Add a penalty for each unknown in the outbreak clade
-      $snsp{$node->id}[$i] = $snsp{$node->id}[$i] * ($knowns/($knowns+$unknowns));
+      $snsp = $snsp * ($knowns/($knowns+$unknowns));
 
       # Format a few values
-      for($snsp{$node->id}[$i]){
+      for($sn,$sp,$snsp){
         $_=sprintf("%0.2f",$_);
       }
 
@@ -158,40 +158,57 @@ sub constraintTree{
       # Avoid a skewed score.
       # TODO avoid a skewed score with some kind of
       # exponential penalty.
-      next if($sn{$node->id}[$i] < 0.01);
-      next if($sp{$node->id}[$i] < 0.01);
+      next if($sn < 0.01);
+      next if($sp < 0.01);
 
       next if($numDescendents < $$settings{'min-taxa'});
 
-      # If this nodes score is best so far 
-      # or if it's the same score but more descendents,
-      # then update what the best score is so far.
-      if($snsp{$node->id}[$i] > $return{Snsp} 
-        || ($snsp{$node->id}[$i] == $return{Snsp} && $numDescendents > $return{numTaxa})
-      ){
-        $return{baseTaxon}=$node->id;
-        $return{levelsFromRoot}=$i;
-        $return{Snsp}=$snsp{$node->id}[$i];
-        $return{mrca}=$ancestory[$i];
-        $return{Sn}=$sn{$node->id}[$i];
-        $return{Sp}=$sp{$node->id}[$i];
-        $return{numTaxa}=$numDescendents;
-        if($$settings{verbose}){
-          logmsg "Taxon $return{baseTaxon} at level $return{levelsFromRoot} with score $return{Snsp} and $return{numTaxa} descendents. $unknowns unknowns in the clade.";
-        }
-      }
+      push(@resultCombination,{
+        baseTaxon      => $node->id,
+        levelsFromRoot => $i,
+        Snsp           => $snsp,
+        mrca           => $ancestory[$i],
+        Sn             => $sn,
+        Sp             => $sp,
+        numTaxa        => $numDescendents,
+        TP             => $TP,
+        FP             => $FP,
+        TN             => $TN,
+        FN             => $FN,
+        knowns         => $knowns,
+        unknowns       => $unknowns,
+      });
     }
   }
   
+  # If no results have been obtained, return the 
+  # empty result.
+  if(!@resultCombination){
+    return \%return;
+  }
+
+  # Sort the results by the score, followed by sn, then
+  # sp, and then finally the number of taxa in the 
+  # target clade.
+  my @sortedResults = sort{
+    $$b{Snsp}    <=> $$a{Snsp} ||
+    $$b{Sn}      <=> $$a{Sn}   ||
+    $$b{Sp}      <=> $$a{Sp}   ||
+    $$b{numTaxa} <=> $$a{numTaxa}
+  } @resultCombination;
+
+  for(qw(Snsp Sn Sp numTaxa baseTaxon levelsFromRoot mrca TP FP TN FN knowns unknowns)){
+    $return{$_}=$sortedResults[0]{$_};
+  }
+
+  #logmsg "Taxon $return{baseTaxon} at level $return{levelsFromRoot} with score $return{Snsp} and $return{numTaxa} descendents. $return{unknowns} unknowns in the clade.";
+
   # Find all taxon names in the "best" clade
   my @sisterTaxa=();
   if($return{mrca}){
     $return{sisterTaxa} = [map{$_->id} grep{$_->is_Leaf} $return{mrca}->get_Descendents];
   }
 
-  #for(qw(Sn Sp Snsp)){
-  #  $return{$_}//=0;
-  #}
   return \%return;
 }
 
@@ -213,27 +230,27 @@ sub inclusionStatus{
   return \%inclusion;
 }
 
-sub reroot{
-  my($tree,$settings)=@_;
-  
-  # Set a default outgroup before looking at the rest of the nodes.
-  my @node=$tree->get_nodes;
-  my $numNodes=@node;
-  my $outgroup=$node[0];
-  my $longest=$node[0]->branch_length || 0;
-
-  for(my $i=0;$i<$numNodes;$i++){
-    for(my $j=$i+1;$j<$numNodes;$j++){
-      if($tree->distance([$node[$i],$node[$j]]) > $longest){
-        $longest=$tree->distance([$node[$i],$node[$j]]);
-        $outgroup=$node[$i];
-      }
-    }
-  }
-  
-  $tree->reroot_at_midpoint($outgroup,'MidpointRoot');
-  return $outgroup;
-}
+#sub reroot{
+#  my($tree,$settings)=@_;
+#  
+#  # Set a default outgroup before looking at the rest of the nodes.
+#  my @node=$tree->get_nodes;
+#  my $numNodes=@node;
+#  my $outgroup=$node[0];
+#  my $longest=$node[0]->branch_length || 0;
+#
+#  for(my $i=0;$i<$numNodes;$i++){
+#    for(my $j=$i+1;$j<$numNodes;$j++){
+#      if($tree->distance([$node[$i],$node[$j]]) > $longest){
+#        $longest=$tree->distance([$node[$i],$node[$j]]);
+#        $outgroup=$node[$i];
+#      }
+#    }
+#  }
+#  
+#  $tree->reroot_at_midpoint($outgroup,'MidpointRoot');
+#  return $outgroup;
+#}
 
 # Given the way the tree is rooted, return which node
 # is the outgroup, defined by the fewest number of leaves
