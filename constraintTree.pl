@@ -24,7 +24,7 @@ sub main{
   die "ERROR: need tsv" if(!$$settings{tsv});
   die "ERROR: need trees" if(!@tree);
 
-  print join("\t",qw(file baseTaxon levelFromRoot numTaxa Sn Sp Score))."\n";
+  print join("\t",qw(file baseTaxon levelFromRoot numInClade Sn Sp Score outgroup))."\n";
   for my $t(@tree){
     if(!-e $t){
       die "ERROR: tree file doesn't exist: $t";
@@ -42,12 +42,34 @@ sub main{
     }
     my $in=Bio::TreeIO->new(-file=>$t);
     while(my $treeObj=$in->next_tree){
-      my $m=constraintTree($treeObj,$$settings{tsv},$settings);
-      if(!$$m{baseTaxon}){
+      # Only look at the given root node...
+      my @ancestorNodes = $treeObj->get_root_node;
+      # ... unless the user supplies --reroot
+      if($$settings{reroot}){
+        @ancestorNodes=grep {!$_->is_Leaf} $treeObj->get_nodes;
+      }
+
+      my @allResults=();
+      for my $node(@ancestorNodes){
+        $treeObj->set_root_node($node);
+        # Get the metrics of the tree into $m
+        my $m=constraintTree($treeObj,$$settings{tsv},$settings);
+        if(!$$m{baseTaxon}){
+          next;
+        }
+        push(@allResults,$m);
+      }
+      if(!@allResults){
         logmsg "WARNING: skipping tree in $t";
         next;
       }
-      print join("\t",basename($t),$$m{baseTaxon},$$m{levelsFromRoot},scalar(@{$$m{sisterTaxa}}), $$m{Sn}, $$m{Sp}, $$m{Snsp})."\n";
+
+      @allResults = sort{$$b{Snsp} <=> $$a{Snsp} || $$b{Sn} <=> $$a{Sn} || $$b{Sp} <=> $$a{Sp}} @allResults;
+      my $m=$allResults[0]; # I don't feel like typing this whole variable name
+      print join("\t",basename($t), $$m{baseTaxon},$$m{levelsFromRoot},scalar(@{$$m{sisterTaxa}}), $$m{Sn}, $$m{Sp}, $$m{Snsp});
+      #print "\t".join(",",@{$$m{outgroupTaxa}});
+      print "\t".scalar(@{$$m{outgroupTaxa}});
+      print "\n";
     }
   }
 }
@@ -64,16 +86,11 @@ sub constraintTree{
     Snsp=>0,
     sisterTaxa=>[],
     numTaxa=>0,
+    outgroup=>treeOutgroup($treeObj,$settings),
   );
+  $return{outgroupTaxa}=[sort{$a cmp $b} map{$_->id} grep{$_->is_Leaf} $return{outgroup}->get_all_Descendents];
+  delete($return{outgroup}); # Not sure if I actually want to store this in the return hash
 
-  if($$settings{reroot}){
-    eval{
-      reroot($treeObj);
-    };
-    if($@){
-      return \%return;
-    }
-  }
   my @node=();
   eval{
     @node=$treeObj->get_nodes;
@@ -120,6 +137,9 @@ sub constraintTree{
 
       # Can't simply have a clade of unknowns
       next if($knowns < 1);
+      # If there is simply a zero value here, then there
+      # is no redeeming this tree.
+      next if($TN+$FP==0 || $TP+$FN==0);
 
       # Sensitivity and Specificity calculation
       $sn{$node->id}[$i]=$TP/($TP+$FN);
@@ -143,6 +163,9 @@ sub constraintTree{
 
       next if($numDescendents < $$settings{'min-taxa'});
 
+      # If this nodes score is best so far 
+      # or if it's the same score but more descendents,
+      # then update what the best score is so far.
       if($snsp{$node->id}[$i] > $return{Snsp} 
         || ($snsp{$node->id}[$i] == $return{Snsp} && $numDescendents > $return{numTaxa})
       ){
@@ -212,13 +235,48 @@ sub reroot{
   return $outgroup;
 }
 
+# Given the way the tree is rooted, return which node
+# is the outgroup, defined by the fewest number of leaves
+# of the first descendent of the root.
+sub treeOutgroup{
+  my($treeObj,$settings)=@_;
+
+  # Get all direct descendents of the root node,
+  # sorted by number of descendents.
+  my @secondaryNode=sort{
+    my @taxaA=sort {$a->id cmp $b->id} grep{$_->is_Leaf} $a->get_all_Descendents;
+    my @taxaB=sort {$a->id cmp $b->id} grep{$_->is_Leaf} $b->get_all_Descendents;
+    my $numA=scalar(@taxaA);
+    my $numB=scalar(@taxaB);
+
+    return 0 if($numA==0 && $numB==0);
+
+    if($numA != $numB){
+      return $numA <=> $numB;
+    }
+
+    # If they have the same number of taxa, go with
+    # alphabetical order to keep a stable sort
+    for(my $i=0;$i<$numA;$i++){
+      if($taxaA[$i] ne $taxaB[$i]){
+        return $taxaA[$i] cmp $taxaB[$i];
+      }
+    }
+    
+    die "INTERNAL ERROR: somehow this tree bifurcates into clades with equally named leaves???";
+  } $treeObj->get_root_node->each_Descendent;
+  
+  return $secondaryNode[0];
+}
+
 sub usage{
   "$0: find sensitivity and specificity of a tree or trees, 
   The spreadsheet must be two columns: taxon-name and boolean (1 or 0)
 
   Usage: $0 --tsv file.tsv tree1.dnd [tree2.dnd...]
   --verbose
-  --noreroot    Do not midpoint root
+  --noreroot    Do not try to root the tree every which way
   --min-taxa  1 Number of taxa that must be in the target clade
   "
 }
+
