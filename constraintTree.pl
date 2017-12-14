@@ -30,7 +30,10 @@ sub main{
     $treeout=Bio::TreeIO->new(-file=>">$$settings{tree}");
   }
 
+  # Start off the output header
   print join("\t",qw(file baseTaxon levelsFromRoot numInClade Sn Sp Score outgroup))."\n";
+
+  # Analyze every tree
   for my $t(@tree){
     if(!-e $t){
       die "ERROR: tree file doesn't exist: $t";
@@ -39,6 +42,8 @@ sub main{
       logmsg "Tree file is empty; skipping: $t";
       next;
     }
+
+    # Try-catch read the tree with Bioperl
     eval{
       Bio::TreeIO->new(-file=>$t)->next_tree;
     };
@@ -46,20 +51,34 @@ sub main{
       logmsg "Could not read file $t; skipping";
       next;
     }
+
+    # Read each tree in the given file and analyze it
+    # in the context of "in" or "out"
     my $in=Bio::TreeIO->new(-file=>$t);
-    while(my $treeObj=$in->next_tree){
+    while(my $treeObjOrig=$in->next_tree){
       # Only look at the given root node...
-      my @ancestorNodes = $treeObj->get_root_node;
+      my @ancestorNodes = $treeObjOrig->get_root_node;
       # ... unless the user supplies --reroot
       if($$settings{reroot}){
-        @ancestorNodes=grep {!$_->is_Leaf} $treeObj->get_nodes;
+        @ancestorNodes=grep {!$_->is_Leaf} $treeObjOrig->get_nodes;
       }
+      # Every rerooted tree should have this many leaves.
+      # Not sure why bioperl has an issue with rerooting
+      # but it needs to be looked at sometime.
+      my $numLeaves=scalar(grep {$_->is_Leaf} $treeObjOrig->get_nodes);
 
+      # Record constraint tree values for each reroot.
       my @allResults=();
       for my $node(@ancestorNodes){
-        $treeObj->set_root_node($node);
+        # Copy this tree over so that we don't mess up the original
+        my $treeObj=Bio::Tree::Tree->new(-root=>$node, -nodelete=>1);
+        next if($numLeaves != scalar(grep {$_->is_Leaf} $treeObj->get_nodes));
+
+        # This is the meat of the script:
         # Get the metrics of the tree into $m
         my $m=constraintTree($treeObj,$$settings{tsv},$settings);
+        # Check if there are useful values. If not, then
+        # don't record the results.
         if(!$$m{baseTaxon}){
           next;
         }
@@ -70,6 +89,7 @@ sub main{
         next;
       }
 
+      # Find the best metrics based on each reroot.
       # Sorted metrics array
       my @m = sort{$$b{Snsp} <=> $$a{Snsp} || $$b{Sn} <=> $$a{Sn} || $$b{Sp} <=> $$a{Sp}} @allResults;
       my %m=%{$m[0]}; # I don't feel like typing this whole variable name
@@ -78,17 +98,17 @@ sub main{
       print "\t".scalar(@{$m{outgroupTaxa}});
       print "\n";
 
+      # If we want to record the rerooted trees...
       if($$settings{tree}){
         $treeout->write_tree($m{tree});
+        # add an extra newline for readability
+        $treeout->_print("\n");
       }
     }
   }
-  $treeout->close;
-
-  # add an extra newline for readability
-  open(my $fh, ">>", $$settings{tree}) or die $!;
-  print $fh "\n";
-  close $fh;
+  if($$settings{tree}){
+    $treeout->close;
+  }
   
   return 0;
 }
@@ -111,6 +131,8 @@ sub constraintTree{
   $return{outgroupTaxa}=[sort{$a cmp $b} map{$_->id} grep{$_->is_Leaf} $return{outgroup}->get_all_Descendents];
   delete($return{outgroup}); # Not sure if I actually want to store this in the return hash
 
+  # Try-catch for getting nodes of the tree. If there are no
+  # nodes for whatever reason, just return and don't die.
   my @node=();
   eval{
     @node=$treeObj->get_nodes;
@@ -168,7 +190,7 @@ sub constraintTree{
       # Add a penalty for each unknown in the outbreak clade
       $snsp = $snsp * ($knowns/($knowns+$unknowns));
 
-      # Format a few values
+      # Format a few values as float.
       for($sn,$sp,$snsp){
         $_=sprintf("%0.2f",$_);
       }
@@ -250,28 +272,6 @@ sub inclusionStatus{
   close $fh;
   return \%inclusion;
 }
-
-#sub reroot{
-#  my($tree,$settings)=@_;
-#  
-#  # Set a default outgroup before looking at the rest of the nodes.
-#  my @node=$tree->get_nodes;
-#  my $numNodes=@node;
-#  my $outgroup=$node[0];
-#  my $longest=$node[0]->branch_length || 0;
-#
-#  for(my $i=0;$i<$numNodes;$i++){
-#    for(my $j=$i+1;$j<$numNodes;$j++){
-#      if($tree->distance([$node[$i],$node[$j]]) > $longest){
-#        $longest=$tree->distance([$node[$i],$node[$j]]);
-#        $outgroup=$node[$i];
-#      }
-#    }
-#  }
-#  
-#  $tree->reroot_at_midpoint($outgroup,'MidpointRoot');
-#  return $outgroup;
-#}
 
 # Given the way the tree is rooted, return which node
 # is the outgroup, defined by the fewest number of leaves
