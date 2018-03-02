@@ -29,6 +29,7 @@ sub main{
   return 0;
 }
 
+# Find the Kendall-Colijn value of a tree comparison
 sub kc{
   my($tree1,$tree2,$lambda,$settings)=@_;
 
@@ -43,7 +44,9 @@ sub kc{
   my @lengthsSquares;
   for(my $i=0;$i<$numLeaves;$i++){
     # Take care of distance from leaf to ancestor node
-    push(@topologySquares,0);
+    push(@topologySquares,
+      ($$numBranches1{$leafName[$i]}{$leafName[$i]} - $$numBranches2{$leafName[$i]}{$leafName[$i]}) ** 2
+    );
     push(@lengthsSquares,
       ($$dist1{$leafName[$i]}{$leafName[$i]} - $$dist2{$leafName[$i]}{$leafName[$i]}) ** 2
     );
@@ -58,12 +61,13 @@ sub kc{
   }
 
   my $lengthsDistance = sqrt(sum(@lengthsSquares));
-  my $topologyDistance= sqrt(sum(@topologySquares)) / 2;
+  my $topologyDistance= sqrt(sum(@topologySquares));
 
-  my $kc = (1-$lambda) * $topologyDistance - $lambda * $lengthsDistance;
+  my $kc = (1-$lambda) * $topologyDistance + $lambda * $lengthsDistance;
   return $kc;
 }
 
+# Find the distance in both branch counts and branch lengths
 sub distanceMatrix{
   my($tree,$settings)=@_;
   my $treeObj = Bio::TreeIO->new(-file=>$tree)->next_tree;
@@ -75,11 +79,10 @@ sub distanceMatrix{
   my $numNodes=@node;
   for(my $i=0;$i<$numNodes;$i++){
     for(my $j=$i+1;$j<$numNodes;$j++){
-      my $dist=$treeObj->distance([$node[$i],$node[$j]]);
+      my($dist,$numBranches)=distanceToRoot($treeObj,[$node[$i],$node[$j]]);
       $distance{$node[$i]->id}{$node[$j]->id}=$dist;
       $distance{$node[$j]->id}{$node[$i]->id}=$dist;
 
-      my $numBranches=topologyDistance($treeObj,[$node[$i],$node[$j]]);
       $numBranches{$node[$i]->id}{$node[$j]->id}=$numBranches;
       $numBranches{$node[$j]->id}{$node[$i]->id}=$numBranches;
     }
@@ -89,35 +92,45 @@ sub distanceMatrix{
   # We can store that as "self vs self"
   for(my $i=0;$i<$numNodes;$i++){
     $distance{$node[$i]->id}{$node[$i]->id}=$node[$i]->branch_length;
+    #$numBranches{$node[$i]->id}{$node[$i]->id}=scalar($treeObj->get_lineage_nodes($node[$i]));
+    $numBranches{$node[$i]->id}{$node[$i]->id}=1;
   }
+
+  # debug
+  #for(my $i=0;$i<$numNodes;$i++){
+  #    print join("\t",$node[$i]->id,values(%{$numBranches{$node[$i]->id}}))."\n";
+  #}
 
   return (\%distance,\%numBranches);
 }
 
-# Find the number of branches between any two nodes on a tree.
-sub topologyDistance {
+# Find the distance from an LCA to the root
+sub distanceToRoot {
     my ($tree,$nodes) = @_;
 
+    my $num_branches = 0;
+    my $branch_length= 0;
     my $lca = $tree->get_lca(@{$nodes});
+
     unless($lca) { 
         $tree->warn("could not find the lca of supplied nodes; can't find distance either");
         return;
     }
 
-    my $num_branches = 0;
-    my $warned = 0;
-    foreach my $current_node (@{$nodes}) {
-        while (1) {
-            last if $current_node eq $lca;
-            $num_branches++;
-
-            $current_node = $current_node->ancestor || last;
-        }
+    my $root_node=$tree->get_root_node;
+    my $curr_node = $lca;
+    while($curr_node ne $root_node){
+      $num_branches++;
+      $branch_length+=$curr_node->branch_length;
+      $curr_node=$curr_node->ancestor;
     }
-    return $num_branches;
+    return ($branch_length,$num_branches);
 }
 
 
+# For KC, the trees have to be rooted the same way, so test
+# the outgroup to make sure it is the same.
+# Also test to make sure all leaves have the same name.
 sub validateTrees{
   my($tree1,$tree2,$settings)=@_;
 
