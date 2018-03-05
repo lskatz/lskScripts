@@ -13,7 +13,7 @@ exit(main());
 
 sub main{
   my $settings={};
-  GetOptions($settings,qw(help lambda=f)) or die $!;
+  GetOptions($settings,qw(help lambda=f alreadyrooted|rooted)) or die $!;
 
   $$settings{lambda}||=0;
 
@@ -134,10 +134,38 @@ sub distanceToRoot {
 sub validateTrees{
   my($tree1,$tree2,$settings)=@_;
 
+  # Test for same root by testing the outgroup leaf names
+  if(!$$settings{alreadyrooted}){
+    testForOutgroup($tree1,$tree2,$settings);
+  }
+
+  testForSameLeaves($tree1,$tree2,$settings);
+
+  return 1;
+}
+
+# Test for same leaves
+sub testForSameLeaves{
+  my($tree1,$tree2,$settings)=@_;
   my $treeObj1 = Bio::TreeIO->new(-file=>$tree1)->next_tree;
   my $treeObj2 = Bio::TreeIO->new(-file=>$tree2)->next_tree;
+  my $nodes1_str=join(" ",
+    sort{$a cmp $b} map{$_->id} grep{$_->is_Leaf} $treeObj1->get_nodes
+  );
+  my $nodes2_str=join(" ",
+    sort{$a cmp $b} map{$_->id} grep{$_->is_Leaf} $treeObj2->get_nodes
+  );
+  if($nodes1_str ne $nodes2_str){
+    die "ERROR: leaves are not the same in both trees";
+  }
+  return 1;
+}
 
-  # Test for same root by testing the outgroup leaf names
+# Die if the outgroups are not the same.
+sub testForOutgroup{
+  my($tree1,$tree2,$settings)=@_;
+  my $treeObj1 = Bio::TreeIO->new(-file=>$tree1)->next_tree;
+  my $treeObj2 = Bio::TreeIO->new(-file=>$tree2)->next_tree;
   my $outgroup1Node = treeOutgroup($treeObj1,$settings);
   my $outgroup2Node = treeOutgroup($treeObj2,$settings);
   my @outgroup1=sort{$a cmp $b} map{$_->id} grep{$_->is_Leaf} $outgroup1Node->get_all_Descendents;
@@ -151,18 +179,6 @@ sub validateTrees{
        .$outgroup1_str."\n"
        .$outgroup2_str."\n";
   }
-
-  # Test for same leaves
-  my $nodes1_str=join(" ",
-    sort{$a cmp $b} map{$_->id} grep{$_->is_Leaf} $treeObj1->get_nodes
-  );
-  my $nodes2_str=join(" ",
-    sort{$a cmp $b} map{$_->id} grep{$_->is_Leaf} $treeObj2->get_nodes
-  );
-  if($nodes1_str ne $nodes2_str){
-    die "ERROR: leaves are not the same in both trees";
-  }
-
   return 1;
 }
 
@@ -212,9 +228,12 @@ sub usage{
   "$0: runs the Kendall-Colijn metric
   Usage: $0 tree.dnd tree2.dnd
 
-  --lambda  0  A lambda value to use in the metric.
-               0 gives weight to a topology metric; 1 gives weight to branch lengths.
-               Must be between 0 and 1.
+  --lambda         0  A lambda value to use in the metric.
+                      0 gives weight to a topology metric.
+                      1 gives weight to branch lengths.
+                      Must be between 0 and 1.
+  --alreadyrooted     The tree is already rooted; don't try
+                      to validate it.
   "
 }
 
