@@ -7,24 +7,62 @@ use Bio::TreeIO;
 use Getopt::Long;
 use File::Basename qw/basename/;
 use List::Util qw/sum/;
+use Statistics::Descriptive;
+use File::Temp qw/tempdir tempfile/;
+use Math::Gauss qw/cdf pdf/;
 
-sub logmsg{local $0=basename $0; print STDERR "$0: @_\n";}
+local $0=basename $0;
+sub logmsg{print STDERR "$0: @_\n";}
 exit(main());
 
 sub main{
   my $settings={};
-  GetOptions($settings,qw(help lambda=f alreadyrooted|rooted)) or die $!;
+  GetOptions($settings,qw(help tempdir=s numcpus=i lambda=f alreadyrooted|rooted reps|rep=i)) or die $!;
 
   $$settings{lambda}||=0;
+  $$settings{reps}||=10;
+  if($$settings{reps} < 5){
+    $$settings{reps}=5;
+  }
+  $$settings{numcpus}||=1;
+  $$settings{tempdir}||=tempdir("$0.XXXXXX",CLEANUP=>1,TMPDIR=>1);
 
   die usage() if(!@ARGV || $$settings{help});
 
-  my($tree1,$tree2)=@ARGV;
+  my($ref,@query)=@ARGV;
 
-  validateTrees($tree1,$tree2,$settings);
+  print join("\t",qw(Ref Query num obs avg stdev Z p))."\n";
+  for my $q(@query){
+    logmsg "Comparing $ref and $q";
+    validateTrees($ref,$q,$settings);
 
-  my $value=kc($tree1,$tree2,$$settings{lambda},$settings);
-  print $value."\n";
+    my $observed=kc($ref,$q,$$settings{lambda},$settings);
+    logmsg "Observed Kendall-Colijn value: $observed.";
+    logmsg "Creating a background distribution in preparation for Z test";
+    my $background=randomTreeDistances($ref,$q,$settings);
+
+    my $stat=Statistics::Descriptive::Full->new();
+    $stat->add_data(@$background);
+    my $avg=$stat->mean;
+    my $stdev=$stat->standard_deviation;
+    #$stdev=1e-9 if($stdev <= 0);
+    my $Z=($observed - $avg)/$stdev;
+    my $p=cdf($observed,$avg,$stdev);
+
+    # Format the numbers to 2 decimal places, either a
+    # float or a scientific number.
+    for($avg,$stdev,$Z,$p){
+      if($_ < 0.01){
+        $_=sprintf("%0.2e",$_);
+      } else {
+        $_=sprintf("%0.2f",$_);
+      }
+    }
+
+    print join("\t",$ref,$q, $$settings{reps}, $observed,
+                    $avg, $stdev, $Z, $p);
+    print "\n";
+  }
 
   return 0;
 }
@@ -65,6 +103,29 @@ sub kc{
 
   my $kc = (1-$lambda) * $topologyDistance + $lambda * $lengthsDistance;
   return $kc;
+}
+
+sub randomTreeDistances{
+  my($ref,$q,$settings)=@_;
+
+  my @newickString=`randTrees.pl $q --force-binary --numcpus $$settings{numcpus} --numtrees $$settings{reps} 2>/dev/null`;
+  die "ERROR with randTrees.pl: $!" if $?;
+
+  logmsg "Comparing random trees against $ref";
+  my @dist;
+  for my $newick(@newickString){
+    #if($newick=~/Node/){
+    #  die Dumper $newick;
+    #  next;
+    #}
+    my ($fh, $randQueryTree) = tempfile("randQuery.XXXXXX",DIR=>$$settings{tempdir},SUFFIX=>".dnd");
+    print $fh $newick;
+    close $fh;
+    my $dist=kc($randQueryTree,$ref,$$settings{lambda},$settings);
+    push(@dist,$dist);
+  }
+
+  return \@dist;
 }
 
 # Find the distance in both branch counts and branch lengths
@@ -234,6 +295,8 @@ sub usage{
                       Must be between 0 and 1.
   --alreadyrooted     The tree is already rooted; don't try
                       to validate it.
+  --numcpus        1  
+  --tempdir        '' Where to store temporary random trees
   "
 }
 
