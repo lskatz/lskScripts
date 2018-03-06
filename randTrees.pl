@@ -23,7 +23,7 @@ exit main();
 
 sub main{
   my $settings={};
-  GetOptions($settings,qw(help outdir=s numTrees=i numcpus=i force-binary)) or die $!;
+  GetOptions($settings,qw(help outdir=s numTrees=i numcpus=i reroot force-binary)) or die $!;
   $$settings{numTrees}||=1;
   $$settings{numcpus}||=1;
   $$settings{'force-binary'}||=0;
@@ -63,6 +63,7 @@ sub randTreeWorker{
   # Create as many random trees as requested
   my @printBuffer;
   my $maxTrees=$$settings{numTrees}/$$settings{numcpus} + 1;
+  #my $factory=Bio::Tree::RandomFactory->new(-num_taxa=>scalar(@$sampleName),-maxcount=>$maxTrees);
   my $factory=Bio::Tree::RandomFactory->new(-taxa=>$sampleName,-maxcount=>$maxTrees);
   while(my $tree=$factory->next_tree){
     if($$settings{'force-binary'}){
@@ -89,7 +90,10 @@ sub randTreeWorker{
         $longestNode=$node;
       }
     }
-    $tree->reroot_at_midpoint($longestNode);
+    if($$settings{reroot}){
+      logmsg "rerooting";
+      $tree->reroot_at_midpoint($longestNode);
+    }
     push(@printBuffer,$tree->as_text("newick")."\n");
   }
   
@@ -117,8 +121,9 @@ sub readSamplesAndBranchs{
   my(@branchLength,@sampleName);
   my $treein=Bio::TreeIO->new(-file=>$t);
   while(my $tree=$treein->next_tree){
+    my $treeout=Bio::TreeIO->new(-format=>"newick");
     # Sample names
-    my @samples=$tree->get_leaf_nodes;
+    my @samples = grep {$_->is_Leaf && $_->id} $tree->get_nodes;
     for(@samples){
       push(@sampleName,$_->id);
     }
@@ -148,5 +153,7 @@ sub usage{
                            splits multifurcating nodes
                            such that there are exactly two
                            descendents per ancestor node.
+  --reroot                 Reroot the tree at the longest
+                           branch length.
   "
 }
