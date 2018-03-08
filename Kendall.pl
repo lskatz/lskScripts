@@ -51,7 +51,7 @@ sub main{
 
     # Format the numbers to 2 decimal places, either a
     # float or a scientific number.
-    for($avg,$stdev,$Z,$p){
+    for($observed,$avg,$stdev,$Z,$p){
       if($_ < 0.01){
         $_=sprintf("%0.2e",$_);
       } else {
@@ -140,7 +140,6 @@ sub distanceMatrix{
   my @node=grep {$_->is_Leaf} $treeObj->get_nodes;
   my $numNodes=@node;
   for(my $i=0;$i<$numNodes;$i++){
-    print STDERR ".";
     for(my $j=$i+1;$j<$numNodes;$j++){
       my($dist,$numBranches)=distanceToRoot($treeObj,[$node[$i],$node[$j]]);
       $distance{$node[$i]->id}{$node[$j]->id}=$dist;
@@ -150,7 +149,6 @@ sub distanceMatrix{
       $numBranches{$node[$j]->id}{$node[$i]->id}=$numBranches;
     }
   }
-  print STDERR "\n";
 
   # KC also requires the distance from leaf to nearest ancestor node.
   # We can store that as "self vs self"
@@ -172,49 +170,32 @@ sub distanceMatrix{
 sub distanceToRoot {
     my ($tree,$nodes) = @_;
 
+    my $branch_length=0;
+    my $num_branches=0;
+
     # Get the LCA in a faster way than $tree->get_lca
-    my @path0=reverse($tree->get_lineage_nodes($$nodes[0]),$$nodes[0]);
-    my @path1=reverse($tree->get_lineage_nodes($$nodes[1]),$$nodes[1]);
+    my @path0=($tree->get_lineage_nodes($$nodes[0]),$$nodes[0]);
+    my @path1=($tree->get_lineage_nodes($$nodes[1]),$$nodes[1]);
     my $numPath0=@path0;
     my $numPath1=@path1;
 
 
-    my $lca;
-    my ($i,$j)=(0,0); # define these outside the loop
-    LCA_SEARCH:
-    for($i=0;$i<$numPath0;$i++){
-      for($j=0;$j<$numPath1;$j++){
-        if($path0[$i]->internal_id eq $path1[$j]->internal_id){
-          $lca=$path0[$i];
-          last LCA_SEARCH;
-        }
+    for(my $i=1;$i<$numPath0;$i++){
+      # If the nodes are the same, then add on the
+      # number of branches and branch length.
+      if($path0[$i]->internal_id eq $path1[$i]->internal_id){
+        $num_branches++;
+        $branch_length+=$path0[$i]->branch_length;
+      } 
+      # If the nodes are different, then the previous 
+      # node was the LCA: return the metrics and don't
+      # add any more to their values.
+      else {
+        return ($branch_length,$num_branches);
       }
     }
-    if(!$lca){
-      logmsg "Could not find LCA. Finding it via bioperl instead";
-      $lca = $tree->get_lca(@{$nodes});
-    }
-    if(!$lca){
-      die "ERROR: could not find LCA between $$nodes[0] and $$nodes[1]";
-    }
 
-#    TODO calculate these faster because I already have the nodes in @path0.
-#    my $num_branches=scalar(@path0) - $i;
-#    my $branch_length=0;
-#    for(;$i<@path0;$i++){
-#      $branch_length+=$path0->branch_length;
-#    }
-#    return ($branch_length,$num_branches);
-    my $branch_length=0;
-    my $num_branches=0;
-
-    my $root_node=$tree->get_root_node;
-    my $curr_node = $lca;
-    while($curr_node ne $root_node){
-      $num_branches++;
-      $branch_length+=$curr_node->branch_length;
-      $curr_node=$curr_node->ancestor;
-    }
+    logmsg "WARNING: could not find an LCA between",$$nodes[0]->id,"and",$$nodes[1]->id;
     return ($branch_length,$num_branches);
 }
 
