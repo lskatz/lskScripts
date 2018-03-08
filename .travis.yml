@@ -1,2 +1,4 @@
 install: true
+script: true
 after_success: bash tests/all.sh
+language: shell
