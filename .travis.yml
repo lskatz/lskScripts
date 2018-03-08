@@ -1,0 +1,2 @@
+install: true
+after_success: bash tests/all.sh
