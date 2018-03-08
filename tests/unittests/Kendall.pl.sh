@@ -1,4 +1,6 @@
 #!/bin/bash
+set -e
+set -x
 
 lambda0=$(./Kendall.pl --alreadyrooted --lambda 0 tests/unittests/input/kendall-colijn1.dnd tests/unittests/input/kendall-colijn2.dnd | tail -n 1 | cut -f 4)
 if [ "$lambda0" != "2.00" ]; then
