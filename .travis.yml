@@ -1,3 +1,5 @@
+before_install:
+  - yes no | sudo apt-get install bioperl
 install: true
 script: true
 after_success: bash tests/all.sh
