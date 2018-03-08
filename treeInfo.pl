@@ -13,7 +13,7 @@ exit(main());
 
 sub main{
   my $settings={};
-  GetOptions($settings,qw(help taxa confidence|bootstrap all cutoff=i diff)) or die $!;
+  GetOptions($settings,qw(help taxa confidence|bootstrap min-confidence all cutoff=f diff)) or die $!;
   $$settings{cutoff}||=0;
 
   # If the user wants all output then set it.
@@ -28,6 +28,7 @@ sub main{
 
   my @header=qw(File numLeaves numNodes);
   push(@header,'confidence') if($$settings{confidence});
+  push(@header,'min-confidence') if($$settings{'min-confidence'});
   push(@header,'taxa') if($$settings{taxa});
   print join("\t",@header)."\n";
 
@@ -50,9 +51,6 @@ sub main{
     my %refTaxa=%{ $taxa{$tree[0]} };
     my $refNumTaxa=scalar(keys(%refTaxa));
 
-    #TODO figure out a better way for multiple comparisons
-    # but for now we will just do two trees.
-    #my $numTrees=2;
     my %diff;
 
     # header
@@ -110,6 +108,7 @@ sub treeInfo{
 
   my @out=($tree,scalar(@leaf),scalar(@node));
   if($$settings{confidence}){
+    my $minConfidence=100;
     my $sum=0;
     my $count=0;
     my @bootstrap;
@@ -121,13 +120,25 @@ sub treeInfo{
       push(@bootstrap,$bootstrap);
       $sum+=$bootstrap;
       $count++;
+
+      if($minConfidence > $bootstrap){
+        $minConfidence=$bootstrap;
+      }
     }
     
     # does median or avg make more sense here?
-    my $median=sprintf("%0.2f",median(@bootstrap));
-    my $avg=sprintf("%0.2f",$sum/$count);
+    my($median,$avg)=(0,0);
+    if($count > 1){
+      $median=sprintf("%0.2f",median(@bootstrap));
+      $avg=sprintf("%0.2f",$sum/$count);
+    }
     push(@out,$avg);
+
+    if($$settings{'min-confidence'}){
+      push(@out,$minConfidence);
+    }
   }
+
 
   push(@out,join(",",sort { $a cmp $b} @leaf)) if($$settings{taxa});
 
@@ -143,6 +154,9 @@ sub median
     {
         return $vals[int($len/2)];
     }
+    elsif($len==0){
+        return 0;
+    }
     else #even
     {
         return ($vals[int($len/2)-1] + $vals[int($len/2)])/2;
@@ -157,6 +171,7 @@ sub usage{
   --taxa         Shows taxon names
   --confidence   Average confidence/bootstrap values
   --cutoff     0 Do not consider confidence values below this value
+  --min-confidence  Display the minimum confidence value
   --all          Shows all possible output fields
   --diff         Shows information about differences between the
                  first tree and the others
