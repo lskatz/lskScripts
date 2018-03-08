@@ -108,8 +108,9 @@ sub kc{
 sub randomTreeDistances{
   my($ref,$q,$settings)=@_;
 
-  my @newickString=`randTrees.pl $q --force-binary --numcpus $$settings{numcpus} --numtrees $$settings{reps} 2>/dev/null`;
-  die "ERROR with randTrees.pl: $!" if $?;
+  my $randTreesLog="$$settings{tempdir}/randTrees.log";
+  my @newickString=`randTrees.pl $q --force-binary --numcpus $$settings{numcpus} --numtrees $$settings{reps} 2>$randTreesLog`;
+  die "ERROR with randTrees.pl:\n".`cat $randTreesLog` if $?;
 
   logmsg "Comparing random trees against $ref";
   my @dist;
@@ -139,6 +140,7 @@ sub distanceMatrix{
   my @node=grep {$_->is_Leaf} $treeObj->get_nodes;
   my $numNodes=@node;
   for(my $i=0;$i<$numNodes;$i++){
+    print STDERR ".";
     for(my $j=$i+1;$j<$numNodes;$j++){
       my($dist,$numBranches)=distanceToRoot($treeObj,[$node[$i],$node[$j]]);
       $distance{$node[$i]->id}{$node[$j]->id}=$dist;
@@ -148,6 +150,7 @@ sub distanceMatrix{
       $numBranches{$node[$j]->id}{$node[$i]->id}=$numBranches;
     }
   }
+  print STDERR "\n";
 
   # KC also requires the distance from leaf to nearest ancestor node.
   # We can store that as "self vs self"
@@ -169,14 +172,41 @@ sub distanceMatrix{
 sub distanceToRoot {
     my ($tree,$nodes) = @_;
 
-    my $num_branches = 0;
-    my $branch_length= 0;
-    my $lca = $tree->get_lca(@{$nodes});
+    # Get the LCA in a faster way than $tree->get_lca
+    my @path0=reverse($tree->get_lineage_nodes($$nodes[0]),$$nodes[0]);
+    my @path1=reverse($tree->get_lineage_nodes($$nodes[1]),$$nodes[1]);
+    my $numPath0=@path0;
+    my $numPath1=@path1;
 
-    unless($lca) { 
-        $tree->warn("could not find the lca of supplied nodes; can't find distance either");
-        return;
+
+    my $lca;
+    my ($i,$j)=(0,0); # define these outside the loop
+    LCA_SEARCH:
+    for($i=0;$i<$numPath0;$i++){
+      for($j=0;$j<$numPath1;$j++){
+        if($path0[$i]->internal_id eq $path1[$j]->internal_id){
+          $lca=$path0[$i];
+          last LCA_SEARCH;
+        }
+      }
     }
+    if(!$lca){
+      logmsg "Could not find LCA. Finding it via bioperl instead";
+      $lca = $tree->get_lca(@{$nodes});
+    }
+    if(!$lca){
+      die "ERROR: could not find LCA between $$nodes[0] and $$nodes[1]";
+    }
+
+#    TODO calculate these faster because I already have the nodes in @path0.
+#    my $num_branches=scalar(@path0) - $i;
+#    my $branch_length=0;
+#    for(;$i<@path0;$i++){
+#      $branch_length+=$path0->branch_length;
+#    }
+#    return ($branch_length,$num_branches);
+    my $branch_length=0;
+    my $num_branches=0;
 
     my $root_node=$tree->get_root_node;
     my $curr_node = $lca;
