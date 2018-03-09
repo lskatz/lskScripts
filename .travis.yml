@@ -6,5 +6,4 @@ before_install:
 script: true
 install:
   - bash tests/unittests/Kendall.pl.sh
-  - bash does not exist .sh
 language: shell
