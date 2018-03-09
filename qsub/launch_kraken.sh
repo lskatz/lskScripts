@@ -25,7 +25,7 @@ function run () {
   if [ $? -gt 0 ]; then logmsg "ERROR with previous command"; exit 1; fi;
 }
 
-NSLOTS=${NSLOTS-1}
+NSLOTS=${NSLOTS-8}
 KRAKEN_DEFAULT_DB=${KRAKEN_DEFAULT_DB-/scicomp/reference/kraken/0.10.4/mini-20140330}
 
 if [ $# -eq 0 ]; then
@@ -53,6 +53,11 @@ TEMPDIR=$(mktemp --directory --suffix=$(basename $0));
 KRAKENOUT="$TEMPDIR/kraken.out"
 KRAKENTAXONOMY="$TEMPDIR/kraken.taxonomy";
 
+function cleanup () {
+  rm -rvf $TEMPDIR
+}
+trap cleanup EXIT
+
 logmsg "tempdir is $TEMPDIR\n  kraken dir is $KRAKENDIR\n  krona dir is $KRONADIR";
 
 run $KRAKENDIR/kraken --fastq-input --paired --db=$KRAKEN_DEFAULT_DB --preload --gzip-compressed --quick --threads $NSLOTS --output $KRAKENOUT $READS
@@ -66,7 +71,14 @@ run kraken-translate --db $KRAKEN_DEFAULT_DB $KRAKENOUT | cut -f 2- | sort | uni
              ' |\
   sort -k1,1nr > $KRAKENTAXONOMY
 
+# Grab the unclassified reads
+head -n 1 $KRAKENOUT | cut -f 3 >> $KRAKENTAXONOMY
+cat $KRAKENTAXONOMY
+
 run $KRONADIR/ktImportText -o $HTML $KRAKENTAXONOMY
 
-rm -rvf $TEMPDIR
+logmsg "DONE. Results will be deleted from $TEMPDIR in two seconds."
+
+sleep 2
+
 
