@@ -4,5 +4,6 @@ before_install:
   - cpanm -l ~ Math::Gauss
 install: true
 script: true
-after_success: bash tests/all.sh
+after_success: 
+  - bash tests/unittests/Kendall.pl.sh
 language: shell
