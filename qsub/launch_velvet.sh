@@ -3,6 +3,7 @@
 #$ -cwd -V
 #$ -o velvet.log -j y
 #$ -N velvet
+#$ -q all.q
 
 module ()
 {
