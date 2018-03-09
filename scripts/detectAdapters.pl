@@ -24,7 +24,6 @@ sub main{
 
   my(@fastq)=@ARGV;
 
-  # echo $ADAPTER | perl -Mautodie -MBio::Perl -e '$in=Bio::SeqIO->new(-fh=>\*STDIN,-format=>"fasta"); while($seq=$in->next_seq){ my $sequence=uc($seq->seq); my %numAdapter; for my $fastq(glob("*.fastq.gz")){ open(FASTQ,"zcat $fastq | "); while(my $id=<FASTQ>){ $read=uc(<FASTQ>); $numAdapter{$sequence}++ if($read=~/$sequence/); } close FASTQ; } for(keys(%numAdapter)){print join("\t",$_,$numAdapter{$_})."\n";} last; }'
   my $adapterSeq=adapters($settings);
 
   for my $fastq(@fastq){
