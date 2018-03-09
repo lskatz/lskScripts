@@ -277,7 +277,7 @@ for(u in 1:length(mytrees)){
   dist <- dist[1]
 
   # Generate output
-  rowVector=c(treefiles[t],treefiles[u],lambda,round(dist,digits=2))
+  rowVector=c(treefiles[t],treefiles[u],lambda,round(dist,digits=10))
 
   # Get the background of Kendall distributions
   if(opts$background){
@@ -310,4 +310,7 @@ for(u in 1:length(mytrees)){
     )
   }
 }
+
+#summary(warnings())
+#tail(warnings(),2);
 
