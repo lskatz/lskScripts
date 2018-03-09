@@ -6,4 +6,5 @@ before_install:
 script: true
 install:
   - bash tests/unittests/Kendall.pl.sh
+  - bash tests/unittests/randTrees.pl.sh
 language: shell
