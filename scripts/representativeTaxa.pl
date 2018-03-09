@@ -40,9 +40,12 @@ sub findRepresentatives{
   my %distance;
   for(my $i=0;$i<$numnodes;$i++){
     print STDERR ".";
+    my $taxonName1=$taxon[$i]->id;
     for(my $j=$i+1; $j<$numnodes; $j++){
-      $distance{$taxon[$i]->id}{$taxon[$j]->id} = $tree->distance(-nodes=>[$taxon[$i],$taxon[$j]]);
-      $distance{$taxon[$j]->id}{$taxon[$i]->id} = $distance{$taxon[$i]->id}{$taxon[$j]->id};
+      my $taxonName2=$taxon[$j]->id;
+      my $distance=distanceBetweenTwoNodes($tree,$taxon[$i],$taxon[$j]);
+      $distance{$taxonName1}{$taxonName2} = $distance;
+      $distance{$taxonName2}{$taxonName1} = $distance;
     }
   }
   print STDERR "\n";
@@ -76,6 +79,26 @@ sub findRepresentatives{
 
   logmsg "Found ".scalar(keys(%cluster))." clusters";
 
+}
+
+# http://cpansearch.perl.org/src/CJFIELDS/BioPerl-1.007002/Bio/Tree/TreeFunctionsI.pm
+#   -> sub distance
+# without error checking to speed it up
+sub distanceBetweenTwoNodes{
+  my($tree,$node1,$node2)=@_;
+
+    my $lca = $tree->get_lca($node1,$node2);
+    my $cumul_dist = 0;
+    foreach my $current_node ($node1,$node2){
+      do {
+        $cumul_dist += $current_node->branch_length;
+
+        $current_node = $current_node->ancestor || last;
+
+      } while($current_node ne $lca);
+    }
+
+    return $cumul_dist;
 }
 
 sub usage{

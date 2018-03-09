@@ -31,11 +31,11 @@ fi
 echo `date +'%H:%M:%S'`" Transferring the file to the remote computer from NCBI"
 THREE=${SRR:0:3}
 SIX=${SRR:0:6}
-ssh $RGN_URI "mkdir -p ~/tmp; $RGN_ASCP_PATH $ASCP_XOPTS anonftp@ftp-private.ncbi.nlm.nih.gov:/sra/sra-instant/reads/ByRun/sra/$THREE/$SIX/$SRR/$SRR.sra ~/tmp/$SRR.sra"
+ssh $RGN_URI "mkdir -p /tmp/$USER; $RGN_ASCP_PATH $ASCP_XOPTS anonftp@ftp-private.ncbi.nlm.nih.gov:/sra/sra-instant/reads/ByRun/sra/$THREE/$SIX/$SRR/$SRR.sra /tmp/$USER/$SRR.sra"
 if [ $? -gt 0 ]; then echo "ERROR with ascp on the remote computer!"; exit 1; fi;
 
 echo `date +'%H:%M:%S'`" Transferring the file back to this computer"
-rsync --progress -a $RGN_URI:~/tmp/$SRR.sra $OUTDIR/$NAME.sra
+rsync -e "ssh -x" --progress -a $RGN_URI:/tmp/$USER/$SRR.sra $OUTDIR/$NAME.sra
 if [ $? -gt 0 ]; then echo "ERROR with transferring the file to here using rsync"; exit 1; fi;
 
 echo `date +'%H:%M:%S'` "Decompressing the file into fastq.gz - this might take a while";

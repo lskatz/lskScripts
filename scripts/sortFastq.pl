@@ -12,7 +12,7 @@ exit main();
 sub main{
   my $settings={};
   GetOptions($settings,qw(help reference=s tempdir=s numcpus=i paired method=s)) or die;
-  $$settings{tempdir}||=mktempdir();
+  $$settings{tempdir}||=tempdir("sortFastq.XXXXXX", TMPDIR=>1, CLEANUP=>1);
   $$settings{numcpus}||=1;
   $$settings{paired}||=0;
   $$settings{reference}||="";
@@ -63,7 +63,7 @@ sub writeFastq{
   logmsg "Reading STDIN to create a fastq file";
   open(FASTQ1,">",$newfastq1) or die "ERROR: could not open temporary fastq file at $newfastq1: $!";
   open(FASTQ2,">",$newfastq2) or die "ERROR: could not open temporary fastq file at $newfastq2: $!" if($is_paired);
-  system("echo '' > $newfastq2") if(!$is_paired); die if $?;
+  system("echo -n '' > $newfastq2") if(!$is_paired); die if $?;
   my $i=0;
   while(<>){
     my $mod=$i++ % 8;
@@ -101,18 +101,19 @@ sub mapReads{
   system($command); die if $?;
   logmsg "Done mapping. Transforming with Samtools";
   system("samtools view -bS '$sam' -T '$reference' > '$bam'"); die if $?;
-  system("samtools sort '$bam' '$sortedPrefix'"); die if $?;
+  system("samtools sort -o '$sorted' '$bam'"); die if $?;
   system("samtools index '$sorted'"); die if $?;
   return $sorted;
 }
 
-sub mktempdir(;$) {
-  my ($settings) = @_;
-  my $tempdir_path = File::Spec->join(File::Spec->tmpdir(), (split("::",(caller(1))[3]))[1].".$$.XXXXX");
-  my $tempdir = tempdir($tempdir_path, CLEANUP => !($$settings{keep}));
-  logmsg "Created tempdir $tempdir";
-  return $tempdir;
-}
+#
+#sub mktempdir(;$) {
+#  my ($settings) = @_;
+#  my $tempdir_path = File::Spec->join(File::Spec->tmpdir(), (split("::",(caller(1))[3]))[1].".$$.XXXXX");
+#  my $tempdir = tempdir($tempdir_path, CLEANUP => !($$settings{keep}));
+#  logmsg "Created tempdir $tempdir";
+#  return $tempdir;
+#}
 
 sub printReadsFromBam{
   my($bam,$reads1,$reads2,$settings)=@_;
@@ -128,6 +129,7 @@ sub printReadsFromBam{
     chomp;
     my @F=split /\t/;
     if(!$$reads1{$F[0]}){
+      next;
       print Dumper [$reads1,\@F];die;
     }
     die "ERROR: I have already seen ID $F[0] and so this might be a shuffled paired end file" if($seen{$F[0]}++);

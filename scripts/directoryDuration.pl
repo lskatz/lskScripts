@@ -11,9 +11,10 @@ use File::Find qw/find/;
 local $0=basename $0;
 
 my $settings={};
-GetOptions($settings,qw(help verbose)) or die $!;
+GetOptions($settings,qw(help exclude=s include=s verbose)) or die $!;
 die usage() if(!@ARGV || $$settings{help});
-
+my $exclude=$$settings{exclude}||0;
+my $include=$$settings{include}||0;
 
 for my $dir(@ARGV){
   die "ERROR: $dir is not a directory" if(!-d $dir);
@@ -22,6 +23,14 @@ for my $dir(@ARGV){
   my $newest=0;
   find({no_chdir=>1, wanted=>sub{
     return if(-d $File::Find::name);
+    if($exclude && $File::Find::name =~ /$exclude/){
+      print "Excluding: $File::Find::name\n" if($$settings{verbose});
+      return;
+    }
+    if($include && $File::Find::name !~ /$include/){
+      print "Not including: $File::Find::name\n" if($$settings{verbose});
+      return;
+    }
     my ($dev,$ino,$mode,$nlink,$uid,$gid,$rdev,$size,
             $atime,$mtime,$ctime,$blksize,$blocks)
       =stat($File::Find::name);
@@ -49,7 +58,11 @@ exit 0;
 
 sub usage{
   "Usage: $0 dir
+  Gives the number of seconds between the oldest and 
+  newest files
+
   --verbose
-  Gives the number of seconds between the oldest and newest files
+  --exclude  PATTERN  Supply a regex pattern to ignore
+                      certain filenames.
   "
 }
