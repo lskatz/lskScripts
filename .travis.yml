@@ -1,6 +1,5 @@
 before_install:
   - export PATH=$PATH:$(pwd)
-  - which randTrees.pl
   - export PERL5LIB=PERL5LIB:$HOME/lib/perl5
   - yes no | sudo apt-get install bioperl
   - cpanm -l ~ Math::Gauss
@@ -8,4 +7,5 @@ install: true
 script: true
 after_success: 
   - bash tests/unittests/Kendall.pl.sh
+  - bash does not exist .sh
 language: shell
