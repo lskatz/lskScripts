@@ -11,6 +11,9 @@ use Statistics::Descriptive;
 use File::Temp qw/tempdir tempfile/;
 use Math::Gauss qw/cdf pdf/;
 
+use threads;
+use Thread::Queue;
+
 local $0=basename $0;
 sub logmsg{print STDERR "$0: @_\n";}
 exit(main());
@@ -115,10 +118,7 @@ sub randomTreeDistances{
   logmsg "Comparing random trees against $ref";
   my @dist;
   for my $newick(@newickString){
-    #if($newick=~/Node/){
-    #  die Dumper $newick;
-    #  next;
-    #}
+    # TODO reroot the tree the same as the reference tree
     my ($fh, $randQueryTree) = tempfile("randQuery.XXXXXX",DIR=>$$settings{tempdir},SUFFIX=>".dnd");
     print $fh $newick;
     close $fh;
@@ -306,6 +306,8 @@ sub usage{
                       Must be between 0 and 1.
   --alreadyrooted     The tree is already rooted; don't try
                       to validate it.
+  --reps           10 How many random trees to generate for
+                      Z-test? More than 100 is recommended.
   --numcpus        1  
   --tempdir        '' Where to store temporary random trees
   "
