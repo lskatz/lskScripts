@@ -26,11 +26,12 @@ sub main{
   my $refObject        = Bio::TreeIO->new(-file=>$ref)->next_tree;
   my $refTreeOutgroup  = treeOutgroup($refObject,$settings);
   my @outgroupIds      = map{$_->id} grep{$_->is_Leaf} $refTreeOutgroup->get_all_Descendents($refTreeOutgroup);
+  my @leaves           = map{$_->id} grep{$_->is_Leaf} $refObject->get_nodes;
 
   # For each query, reroot and print
   for my $q(@query){
     my $queryObject      = Bio::TreeIO->new(-file=>$q)->next_tree;
-    my $queryTreeOutgroup= findNode(\@outgroupIds,$queryObject,$settings);
+    my $queryTreeOutgroup= findNode([@outgroupIds,@leaves],$queryObject,$settings);
     logmsg "Found the correct node to root the tree";
     $queryObject->reroot($queryTreeOutgroup);
 
@@ -96,6 +97,9 @@ sub findNode{
     my @starterNode=$tree->find_node(-id=>$$leafIds[$nodeIndex]);
     for(my $i=0;$i<@starterNode;$i++){
       my $node=$starterNode[$i];
+      if($node->each_Descendent < 2){
+        next;
+      }
       # Go up the chain until we have at least the right number
       # of decendent nodes.
       my @sortedQueryId;
@@ -117,7 +121,7 @@ sub findNode{
       #}
     }
   }
-  die "Could not find common root with the heuristic. Needs more development";
+  die "Could not find common root with the heuristic.";
 
 
   # If all else fails, just try every node and reroot
@@ -129,7 +133,7 @@ sub findNode{
 
 sub usage{
   "$0: Roots a query tree according to a reference tree
-  Usage: $0 ref.dnd query.dnd
+  Usage: $0 ref.dnd query.dnd > query.rerooted.dnd
   "
 }
 
