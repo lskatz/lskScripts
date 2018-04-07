@@ -4,7 +4,7 @@
 #$ -cwd -V
 #$ -o spades.log
 #$ -j y
-#$ -N SPAdes3.1.0
+#$ -N SPAdes3.6.2
 #$ -q all.q
 
 reads=$1
@@ -17,12 +17,12 @@ if [ "$out" == "" ]; then
   exit 1;
 fi;
 
-module load SPAdes/3.1.0
-if [ $? -gt 0 ]; then echo "unable to load spades 3.1.0"; exit 1; fi;
+module load SPAdes/3.6.2
+if [ $? -gt 0 ]; then echo "unable to load spades 3.6.2"; exit 1; fi;
 
 NSLOTS=${NSLOTS:=1}
 spades.py --12 $reads --careful -o $out -t $NSLOTS 
-if [ $? -gt 0 ]; then echo "problem with spades 3.1.0"; exit 1; fi;
+if [ $? -gt 0 ]; then echo "problem with spades 3.6.2"; exit 1; fi;
 
 # Assembly metrics. Don't die if this script dies.  It's not worth it.
 echo "# CG-Pipeline metrics" > $out/run_assembly_metrics.txt

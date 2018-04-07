@@ -2,11 +2,12 @@
 
 # Runs spades on a set of Illumina reads
 
-set -e
 
 # Read ARGV
 OUTDIR=$1; shift;
 READS=$@
+
+set -e
 
 if [ "$READS" == "" ]; then
   echo "Assemble all reads in a directory from Illumina runs"
@@ -16,8 +17,7 @@ if [ "$READS" == "" ]; then
 fi
 
 if [ ! -d "$OUTDIR" ]; then
-  echo "ERROR: could not find out dir $OUTDIR";
-  exit 1;
+  mkdir "$OUTDIR"
 fi;
 
 TMP=$(mktemp --tmpdir='.' --directory qsubSkesa.XXXXXXXX)
@@ -27,7 +27,7 @@ echo "tmp dir is $TMP "
 # CTRL file will have per line:
 #   filename  coverageLevel
 CTRL_FILE="$TMP/array.txt"
-echo "$READS" | tr ' ' '\n' | grep "_R1_" > $CTRL_FILE
+echo "$READS" | tr ' ' '\n'  > $CTRL_FILE
 echo "CTRL_FILE is $CTRL_FILE"
 
 module purge
@@ -65,7 +65,8 @@ qsub -q all.q -N skesa -o $TMP/log -j y -pe smp 1 -V -cwd -t 1-$(cat $CTRL_FILE 
     exit 1;
   fi
 
-  skesa --cores $NSLOTS --fastq $fastq --gz --use_paired_ends > $fastaOut
+  /usr/bin/time -o $OUTDIR/time.$SGE_TASK_ID.tsv -f "$fastq\t%e" \
+    skesa --cores $NSLOTS --fastq $fastq --gz --use_paired_ends > $fastaOut
 
   mv -v $fastaOut $OUTDIR
 END_OF_SCRIPT
