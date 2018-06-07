@@ -30,7 +30,7 @@ exit main();
 
 sub main{
   my $settings={};
-  GetOptions($settings,qw(help tempdir=s method=s numcpus=i numtrees=i)) or die $!;
+  GetOptions($settings,qw(help background-file=s tempdir=s method=s numcpus=i numtrees=i)) or die $!;
   $$settings{numcpus}||=1;
   $$settings{numtrees}||=0;
   $$settings{method}||="kf";
@@ -165,6 +165,13 @@ sub bioPhyloDist{
     }
     # Respect the number of trees requested
     splice(@scores,$$settings{numtrees});
+    if($$settings{'background-file'}){
+      logmsg "Writing raw scores to $$settings{'background-file'}";
+      open(my $fh,">", $$settings{'background-file'}) or die "ERROR: could not write to ".$$settings{'background-file'}.": $!";
+      print $fh join("\n",sort{$a <=> $b} @scores);
+      print $fh "\n";
+      close $fh;
+    }
 
     my $stat=Statistics::Descriptive::Full->new();
     $stat->add_data(@scores);
@@ -261,6 +268,8 @@ sub usage{
   --numtrees  1000   How many random trees to compare against?
                      Use 0 to not run a statistical test.
   --numcpus   1
+  --background-file  A filename for recording the background
+                     distribution distances (optional)
   "
 }
 

@@ -6,6 +6,7 @@ use Data::Dumper;
 use Bio::TreeIO;
 use Getopt::Long;
 use File::Basename qw/basename/;
+use List::Util qw/sum/;
 use List::MoreUtils qw/uniq/;
 
 sub logmsg{local $0=basename $0; print STDERR "$0: @_\n";}
@@ -26,7 +27,7 @@ sub main{
 
   die usage() if(!@tree || $$settings{help});
 
-  my @header=qw(File numLeaves numNodes);
+  my @header=qw(File numLeaves numNodes avgBranchLength);
   push(@header,'confidence') if($$settings{confidence});
   push(@header,'min-confidence') if($$settings{'min-confidence'});
   push(@header,'taxa') if($$settings{taxa});
@@ -105,8 +106,9 @@ sub treeInfo{
   my @leaf=map{$_->id} $t->get_leaf_nodes;
   my @node=$t->get_nodes;
 
+  my $avgBranchLength = sum(map{$_->branch_length||0} @node)/scalar(@node);
 
-  my @out=($tree,scalar(@leaf),scalar(@node));
+  my @out=($tree,scalar(@leaf),scalar(@node),$avgBranchLength);
   if($$settings{confidence}){
     my $minConfidence=100;
     my $sum=0;

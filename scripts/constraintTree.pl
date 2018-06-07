@@ -17,7 +17,7 @@ sub main{
   my $settings={};
   GetOptions($settings,qw(help tree|trees|treeout=s tsv=s verbose reroot! min-taxa=i)) or die $!;
   $$settings{reroot}//=1;
-  $$settings{'min-taxa'}||=1;
+  $$settings{'min-taxa'}//=0;
   $$settings{tree}||="";
   my @tree=@ARGV;
 
@@ -157,6 +157,11 @@ sub constraintTree{
   my $totalNegatives=scalar(grep {$_->is_Leaf && $_->get_tag_values("outbreak")== 0} @node);
   my $totalUnknowns =scalar(grep {$_->is_Leaf && $_->get_tag_values("outbreak")==-1} @node);
   my $numNodes=@node;
+
+  if($$settings{'min-taxa'} == 0){
+    logmsg "Requiring that all taxa be present...";
+    $$settings{'min-taxa'}=$totalPositives;
+  }
 
   my @resultCombination; # array of hashes
   for my $node(@node){
@@ -322,12 +327,18 @@ sub treeOutgroup{
 sub usage{
   "$0: find sensitivity and specificity of a tree or trees, 
   The spreadsheet must be two columns: taxon-name and boolean (1 or 0)
+  A score is also reported.
+    Score = Sn * Sp * number of taxa with known status / number of taxa
 
   Usage: $0 --tsv file.tsv tree1.dnd [tree2.dnd...]
   --verbose
   --noreroot            Do not try to root the tree every which way
-  --min-taxa  1         Number of taxa that must be in the target clade
+  --min-taxa  0         Number of taxa that must be in the target clade
+                        If not set, then it will be set to the number
+                        of status-associated isolates found in the 
+                        tree.
   --trees     file.dnd  Place final rerooted tree(s) in this file
+  --tsv       [rqr'd]   The spreadsheet
   "
 }
 

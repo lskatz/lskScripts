@@ -1,1 +1,0 @@
-scripts/alignmentToPhyloviz.pl

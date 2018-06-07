@@ -1,1 +1,0 @@
-scripts/extractSequence.pl

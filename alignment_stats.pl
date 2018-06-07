@@ -1,1 +1,0 @@
-scripts/alignment_stats.pl

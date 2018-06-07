@@ -1,1 +1,0 @@
-scripts/fastacmd.pl

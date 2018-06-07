@@ -1,1 +1,0 @@
-scripts/detectAdapters.pl

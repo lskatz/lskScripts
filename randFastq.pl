@@ -1,1 +1,0 @@
-scripts/randFastq.pl

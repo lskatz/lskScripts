@@ -18,9 +18,9 @@ sub main{
   my $settings={};
   GetOptions($settings,qw(help root-on|root-with|root=s)) or die $!;
 
-  $$settings{'root-on'} || die "ERROR: parameter --root-on is required. --help for more information.";
-
   die usage() if(!@ARGV || $$settings{help});
+
+  $$settings{'root-on'} || die "ERROR: parameter --root-on is required. --help for more information.";
 
   my(@query)=@ARGV;
   my $treeout=Bio::TreeIO->new(-format=>"newick");

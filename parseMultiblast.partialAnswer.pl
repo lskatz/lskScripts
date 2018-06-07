@@ -1,1 +1,0 @@
-scripts/parseMultiblast.partialAnswer.pl

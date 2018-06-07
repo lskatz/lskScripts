@@ -1,1 +1,0 @@
-scripts/splitPolytomies.pl
