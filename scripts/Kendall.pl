@@ -20,7 +20,7 @@ exit(main());
 
 sub main{
   my $settings={};
-  GetOptions($settings,qw(help tempdir=s numcpus=i lambda=f alreadyrooted|rooted reps|rep=i)) or die $!;
+  GetOptions($settings,qw(help tempdir=s numcpus=i lambda=f alreadyrooted|already-rooted|rooted reps|rep=i)) or die $!;
 
   $$settings{lambda}||=0;
   $$settings{reps}||=10;
