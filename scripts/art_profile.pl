@@ -2,10 +2,12 @@
 use strict;
 use warnings;
 use Data::Dumper;
+use File::Basename qw/basename/;
 use Getopt::Long;
 use threads;
 use Thread::Queue;
 
+local $0=basename $0;
 sub logmsg {print STDERR "$0: @_\n";}
 exit(main());
 
