@@ -5,6 +5,9 @@ use warnings;
 use Data::Dumper;
 use File::Basename qw/basename/;
 use Getopt::Long qw/GetOptions/;
+use POSIX qw/ceil/;
+use threads;
+use Thread::Queue;
 
 local $0 = basename $0;
 sub logmsg{print STDERR "$0: @_\n";}
@@ -12,17 +15,53 @@ sub logmsg{print STDERR "$0: @_\n";}
 exit main();
 sub main{
   my $settings={};
-  GetOptions($settings,qw(help tile-size|size-of-tile=s)) or die $!;
+  GetOptions($settings,qw(help numcpus=i tile-size|size-of-tile=s)) or die $!;
   $$settings{'tile-size'} ||= 1;
+  $$settings{numcpus}||=1;
 
-  print "File\tspots-per-mm2\n";
-  for my $fastq(@ARGV){
-    logmsg $fastq;
-    my $density = clusterDensity($fastq,$settings);
-    print "$fastq\t$density\n";
+  my $fastqPerThread = ceil(scalar(@ARGV) / $$settings{numcpus});
+
+  my $printQ = Thread::Queue->new();
+  $printQ->enqueue("File\tspots-per-mm2");
+
+  my @thr;
+  for(my $i=0;$i<$$settings{numcpus};$i++){
+    my @fastq = splice(@ARGV,0,$fastqPerThread);
+    $thr[$i] = threads->new(sub{
+      my($fastqArr, $printQ)=@_;
+      for my $fastq(@$fastqArr){
+        logmsg $fastq;
+        my $density = clusterDensity($fastq,$settings);
+        $printQ->enqueue([$fastq, $density]);
+      }
+      return scalar(@fastq);
+    }, \@fastq, $printQ);
   }
 
+  # start the printer
+  my $printerThread = threads->new(\&printer, $printQ);
+
+  # join the threads
+  for(@thr){
+    $_->join;
+  }
+
+  # Terminate multithreaded printing
+  $printQ->enqueue(undef);
+  $printerThread->join();
+
   return 0;
+}
+
+sub printer{
+  my($Q)=@_;
+  while(defined(my $toPrint = $Q->dequeue)){
+    if(ref($toPrint) eq 'ARRAY'){
+      print join("\t",@$toPrint)."\n";
+    } else {
+      print "$toPrint\n";
+    }
+  }
 }
 
 sub clusterDensity{
@@ -62,5 +101,6 @@ sub usage{
   Usage: $0 [options] *.fastq.gz
   
   --tile-size  1  Size of the tile in square mm.
+  --numcpus    1
   "
 }
