@@ -17,6 +17,9 @@ sub main{
   my $settings={};
   GetOptions($settings,qw(help pe-defline-match=s verbose pe|paired-end|pairedend min-quality|min-qual=i min-length=i));
   $$settings{pe}//=0;
+  if($$settings{'pe-defline-match'}){
+    $$settings{pe}=1;
+  }
   $$settings{'min-quality'}//=0;
   $$settings{'min-length'}//=0;
   die usage() if($$settings{help});
@@ -86,7 +89,7 @@ sub validate{
           $_=~/$regex/;
           $strToMatch=$1;
           if(!$strToMatch){
-            return "Could not find the pattern from --pe-defline-match:\n". errorMsg($i,$_,$settings);
+            return "Could not find the pattern from --pe-defline-match=".$$settings{'pe-defline-match'}."\n". errorMsg($i,$_,$settings);
           }
         }
       }
@@ -176,10 +179,11 @@ sub usage{
   --help              for help
   --verbose           verbose
   --pe                Check for interleaved paired end
-  --pe-defline-match  If --pe, then you must give an argument
-                      regular expression for which the R1 and
-                      R2 headers should match.
+  --pe-defline-match  Match R1 and R2 headers with a 
+                      regular expression.
                       Suggestion: --pe-defline-match '^@\\S+'
+                      If this option is supplied, then --pe 
+                      is turned on too.
 
   Options that might slow it down
   --min-length  1
