@@ -15,10 +15,10 @@ sub main{
   $$settings{kmerlength}||="31,21,11";
 
   my @kmerlength=split(/,/,$$settings{kmerlength});
-  for(my $i=0;$i<@ARGV;$i++){
+  for(my $i=0;$i<@ARGV;$i+=2){
     my $R1=$ARGV[$i];
     my $R2=$ARGV[$i+1];
-    
+
     my $kmerInfo      = countKmers ($R1,$R2,\@kmerlength,$settings);
     my $sortedEntries = sortEntries($kmerInfo,$settings);
   }
@@ -41,7 +41,7 @@ sub sortEntries{
     my $topKmer ="";
     while(my($kmer, $count) = each(%{$$kmerCounter{$kmerLength}})){
       if($count > $maxcount){
-        $topKmer  = $kmer." => $count";
+        $topKmer  = $kmer;
         $maxcount = $count;
       }
     }
@@ -51,10 +51,20 @@ sub sortEntries{
   # For each kmer length, print out resulting reads
   for my $kmerLength(@kmerLength){
     my @readId = @{ $$kmer_to_read{$topKmer{$kmerLength}} };
-    die Dumper \@readId;
 
     # print the reads
-    # remove from the entries hash
+    for my $id(@readId){
+      if($$entries{$id}){
+        print $$entries{$id};
+        # remove from the entries hash
+        $$entries{$id} = 0;
+      }
+    }
+  }
+
+  # Print the rest
+  for my $entry(sort {$a cmp $b} values(%$entries)){
+    print $entry;
   }
 }
 
@@ -69,8 +79,8 @@ sub countKmers{
   # kmer_to_read => {AAA => id1, ...}
   my %kmer_to_read;
 
-  open(my $fh1,"zcat $R1|") or die "ERROR: could not open $R1: $!";
-  open(my $fh2,"zcat $R2|") or die "ERROR: could not open $R2: $!";
+  open(my $fh1,"gzip -cd $R1|") or die "ERROR: could not open $R1: $!";
+  open(my $fh2,"gzip -cd $R2|") or die "ERROR: could not open $R2: $!";
   while(my $id1 = <$fh1>){
     my $seq1  = <$fh1>;
     my $plus1 = <$fh1>;
@@ -79,7 +89,7 @@ sub countKmers{
     my $seq2  = <$fh2>;
     my $plus2 = <$fh2>;
     my $qual2 = <$fh2>;
-    my $entry = "$id1$seq1,$plus1,$qual1,$id2,$seq2,$plus2,$qual2";
+    my $entry = "$id1$seq1$plus1$qual1$id2$seq2$plus2$qual2";
     chomp($id1,$seq1,$plus1,$qual1,$id2,$seq2,$plus2,$qual2);
 
     # Save the read
