@@ -5,14 +5,15 @@ use warnings;
 use Data::Dumper;
 use File::Basename qw/basename/;
 use Getopt::Long qw/GetOptions/;
-use List::MoreUtils qw/uniq/;
+#use List::MoreUtils qw/uniq/;
 
 exit main();
 
 sub main{
   my $settings={};
   GetOptions($settings,qw(help kmerlength=s)) or die $!;
-  $$settings{kmerlength}||="31,21,11";
+  $$settings{kmerlength}||="29,17";
+  die usage() if($$settings{help} || @ARGV < 2);
 
   my @kmerlength=split(/,/,$$settings{kmerlength});
   for(my $i=0;$i<@ARGV;$i+=2){
@@ -32,6 +33,7 @@ sub sortEntries{
   my $kmerCounter = $$kmerInfo{kmerCounter};
   my $kmer_to_read= $$kmerInfo{kmer_to_read};
 
+  # gzip seems to do better if kmer lengths are ascending
   my @kmerLength = sort {$a <=> $b} keys(%$kmerCounter);
 
   # Find the most common kmer of each length
@@ -119,4 +121,12 @@ sub countKmers{
   return {read=>\%read,kmerCounter=>\%kmerCounter,kmer_to_read=>\%kmer_to_read};
 }
 
+
+sub usage{
+  local $0 = basename $0;
+  "Sorts fastq entries by common kmers of varying lengths
+  Usage: $0 R1.fastq.gz R2.fastq.gz
+  --kmerlength  29,17
+  "
+}
 
