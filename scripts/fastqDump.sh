@@ -12,8 +12,12 @@ if [ "$SRR" == "" ]; then
   exit 1;
 fi
 
+if [ -e "${SRR}.fastq.gz" ]; then
+  echo "${SRR}.fastq.gz is already present."
+  exit 1
+fi
 if [ -e "${SRR}_1.fastq.gz" ]; then
-  echo "SRR was already downloaded"
+  echo "${SRR}_1.fastq.gz is already present."
   exit 1
 fi
 
@@ -29,11 +33,13 @@ if [ "$(which fasterq-dump 2>/dev/null)" == "" ]; then
     exit 1
   fi
 else
+  cd $tempdir
   fasterq-dump $SRR --print-read-nr --threads 1 --outdir $tempdir --split-files --skip-technical 
   if [ $? -gt 0 ]; then 
     echo "ERROR with fasterq-dump and $SRR"
     exit 1
   fi
+  cd -
 
   for fastq in $tempdir/*.fastq; do 
     perl -lane '
