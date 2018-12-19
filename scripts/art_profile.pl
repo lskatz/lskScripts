@@ -54,7 +54,7 @@ sub main{
       # Print the first row for this position, the quality value
       print "$nt\t$pos";
       for my $quality (@qualArr){
-        #print "\t$quality";
+        $quality //= chr(33);
         print "\t";
         print ord($quality)-33;
       }
