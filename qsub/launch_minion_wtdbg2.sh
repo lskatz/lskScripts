@@ -12,8 +12,8 @@ module purge
 module load samtools/1.4.1
 module load minimap2
 
-#NSLOTS=${NSLOTS:=1}
-NSLOTS=24
+NSLOTS=${NSLOTS:=1}
+#NSLOTS=24
 
 OUT=$1
 shift
