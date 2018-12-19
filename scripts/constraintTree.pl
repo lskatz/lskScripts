@@ -273,6 +273,12 @@ sub inclusionStatus{
     # Therefore, any "true" value evaluates to 1 and 
     # any "empty" value evaluates to 0.
     $inclusion{$isolateName} = !!$bool + 0;
+
+    # Quick patch on how to take care of -1 values
+    # which mean "I don't know"
+    if($bool == -1){
+      $inclusion{$isolateName} = 0;
+    }
   }
   close $fh;
   return \%inclusion;
