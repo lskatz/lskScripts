@@ -4,7 +4,7 @@
 #$ -cwd -V
 #$ -o spades.log
 #$ -j y
-#$ -N SPAdes3.6.2
+#$ -N SPAdes3.11.0
 #$ -q all.q
 
 reads=$1
@@ -17,7 +17,7 @@ if [ "$out" == "" ]; then
   exit 1;
 fi;
 
-module load SPAdes/3.6.2
+module load SPAdes/3.11.0
 if [ $? -gt 0 ]; then echo "unable to load spades 3.6.2"; exit 1; fi;
 
 NSLOTS=${NSLOTS:=1}

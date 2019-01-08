@@ -8,8 +8,9 @@ set -e
 ref=$1
 draft=$2
 output=$3
-MAUVE=$(which mauve)
+MAUVE=$(which progressiveMauve)
 jar=`dirname $MAUVE`/Mauve.jar
+echo "JAR: $jar"
 
 if [ "$output" = "" ]; then
   echo "Usage: $0 ref.fasta draft.fasta outputDir";

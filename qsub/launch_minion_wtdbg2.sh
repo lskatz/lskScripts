@@ -5,7 +5,6 @@
 #$ -pe smp 2-16
 #$ -V -cwd
 set -e
-set -u
 
 source /etc/profile.d/modules.sh
 module purge
@@ -16,10 +15,12 @@ NSLOTS=${NSLOTS:=1}
 #NSLOTS=24
 
 OUT=$1
-shift
+shift || true
 READS=$@
 GENOMELENGTH=5000000 # TODO make this a parameter
 LONGREADCOVERAGE=50  # How much coverage to target with long reads
+
+set -u
 
 PREFIX=$(basename $OUT .fasta)
 
