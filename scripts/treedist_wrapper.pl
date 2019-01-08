@@ -10,12 +10,13 @@ use File::Spec;
 use Getopt::Long;
 use Statistics::Descriptive;
 use Math::Gauss qw/cdf pdf/;
+use List::Util qw/shuffle sum/;
 
 use Bio::Phylo::IO;
 use Bio::Phylo::Factory;
-use Bio::TreeIO;
 
 use threads;
+use Thread::Queue;
 
 my $startTime=time();
 sub logmsg{
@@ -30,13 +31,15 @@ exit main();
 
 sub main{
   my $settings={};
-  GetOptions($settings,qw(help background-file=s tempdir=s method=s numcpus=i numtrees=i)) or die $!;
+  GetOptions($settings,qw(help numobserved=i observed-dir=s numtaxa=i background-file=s tempdir=s method=s numcpus=i numtrees=i)) or die $!;
   $$settings{numcpus}||=1;
   $$settings{numtrees}||=0;
   $$settings{method}||="kf";
   $$settings{method}||=lc($$settings{method});
   $$settings{tempdir}||=tempdir(basename($0).".XXXXXX",TMPDIR=>1,CLEANUP=>1);
   $$settings{tempdir}=File::Spec->rel2abs($$settings{tempdir});
+  $$settings{numtaxa}||=0;
+  $$settings{numobserved}||=1;
 
   my($ref,@query)=@ARGV;
 
@@ -126,17 +129,63 @@ sub validateTrees{
 sub bioPhyloDist{
   my($query,$ref,$method,$settings)=@_;
 
-  # First find the observed value.
-  # The tree might be multifurcating and therefore might give a non-zero
-  # observed result.  Rerun this test until we see a zero.
-  my $obs;
-  my $tries=0;
-  do{
-    $obs=observedScore($query,$ref,$method,$settings);
-    if($tries++ > 10000){
-      die "ERROR: tried to get a zero self vs self score for $ref but couldn't after $tries tries. The tree might be too multifurcating. Force bifurcation and try again";
+  my $observedQ = Thread::Queue->new;
+  my $printTreeQueue = threads->new(sub{
+    my $outdir = $$settings{'observed-dir'};
+    if(!defined($outdir)){
+      return;
     }
-  } while($ref eq $query && $obs != 0);
+
+    mkdir $outdir;
+    my $outfile = $outdir."/".basename($query);
+    open(my $fh, ">", $outfile) or die "ERROR writing to $outfile: $!";
+    while(defined(my $tree = $observedQ->dequeue)){
+      print $fh $tree."\n";
+    }
+    close $fh;
+  });
+
+  # First find the observed value.
+  # Multithreaded so that we can get multiple observed values.
+  my @thr;
+  for(0..$$settings{numcpus}-1){
+    my %settingsCopy=%$settings;
+    my $repsPerThread = int($$settings{numobserved}/$$settings{numcpus}) + 1;
+    $thr[$_] = threads->new(sub{
+      my($repsPerThread, $ref, $query, $observedQ, $settings)=@_;
+      my @obs;
+      for my $obsRep(1..$repsPerThread){
+        my $obs;
+        my $tries=0;
+        if($ref eq $query){
+          push(@obs, 0);
+          next;
+        }
+        
+        do{
+          my($tmp,$queryDnd,$refDnd)=observedScore($query,$ref,$method,$settings);
+          $obs = $tmp;
+          $observedQ->enqueue($queryDnd);
+          if($tries++ > 10000){
+            die "ERROR: tried to get a zero self vs self score for $ref but couldn't after $tries tries. The tree might be too multifurcating. Force bifurcation and try again";
+          }
+        } while($ref eq $query && $obs != 0);
+        push(@obs, $obs);
+        logmsg "I calculated the distances between trees $obsRep times";
+      }
+      return \@obs;
+    },$repsPerThread, $ref, $query, $observedQ, \%settingsCopy);
+  }
+
+  my @obs;
+  for(@thr){
+    my $obsTmp = $_->join;
+    push(@obs, @$obsTmp);
+  }
+  $observedQ->enqueue(undef); # kill the printer thread
+  END{$printTreeQueue->join;} # Join this whenever the script is done
+  @obs = sort {$a<=>$b} (shuffle(@obs))[0..$$settings{numobserved}-1];
+  my $obs = sprintf("%0.2f",sum(@obs)/scalar(@obs));
 
   # Next run a test against a random background distribution
 
@@ -223,7 +272,38 @@ sub observedScore{
     -file=>$ref,
   )->first;
 
+  # Choose some random taxa to remove/keep
+  if(my $numTaxa = $$settings{numtaxa}){
+    my $numLeaves = $queryObj->get_ntax();
+    my $numToRemove = $numLeaves - $$settings{numtaxa};
+    my @leaf_removal = (
+      map { $_->get_name() }
+      shuffle(
+      @{ $queryObj->get_terminals }
+    ))[0..$numToRemove -1];
+    $queryObj = $queryObj->prune_tips(\@leaf_removal);
+    $refObj   = $refObj->prune_tips(\@leaf_removal);
+  }
+
+  # Tree operations for both
   for($queryObj,$refObj){
+    # Make polytomies out of short branch lengths
+    $_->visit_depth_first(
+      -pre=>sub{
+        my ($node) = @_;
+        my $branch_length = $node->get_branch_length || 0;
+        if($branch_length < 1e-5 
+          && defined(my $parent=$node->get_parent) 
+          && defined(my $grandparent = $node->get_parent->get_parent)
+        ){
+          $branch_length += $parent->get_branch_length;
+          $node->set_branch_length($branch_length);
+          $node->set_parent($grandparent);
+          #logmsg "Set the parent ". $node->get_name." with length ".$node->get_branch_length;
+        }
+      },
+    );
+
     # Break polytomies and make the tree binary.
     $_=$_->resolve()->deroot();
   }
@@ -252,6 +332,9 @@ sub observedScore{
 
   die "INTERNAL ERROR: invalid distance score" if(!defined($obs));
 
+  if(wantarray){
+    return($obs, $queryObj->to_newick, $refObj->to_newick);
+  }
   return $obs;
 }
 
@@ -265,11 +348,16 @@ sub usage{
                      rf:  robinson-foulds (symmetric distance)
                      WARNING: the kf and kf2 metrics do not produce
                      the same values as R-phangorn or Phylip-treedist.
+  --numobserved  1   Repeat the calculation between the observed
+                     trees (not the random trees) and report the average.
   --numtrees  1000   How many random trees to compare against?
                      Use 0 to not run a statistical test.
-  --numcpus   1
+  --numcpus      1
+  --observed-dir     A directory for recording the observed trees
   --background-file  A filename for recording the background
                      distribution distances (optional)
+  --numtaxa      0   If > 0, only keep X leaves on the tree for
+                     comparisons.
   "
 }
 
