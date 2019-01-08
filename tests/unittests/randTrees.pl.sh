@@ -1,8 +1,9 @@
 #!/bin/bash
 
 set -e
+dir=$(realpath $(dirname $0));
 
-tree=$(./randTrees.pl --numTrees 1 tests/unittests/input/kendall-colijn1.dnd)
+tree=$($dir/../../scripts/randTrees.pl --numTrees 1 $dir/input/kendall-colijn1.dnd)
 bytes=$(wc -c <<< $tree)
 if [ "$bytes" -lt 140 ]; then
   echo "Size of the tree is less than 140 bytes, weird. The tree was:"

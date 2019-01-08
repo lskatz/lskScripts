@@ -2,12 +2,14 @@
 
 set -e
 
+dir=$(realpath $(dirname $0));
+
 total="Total: 66"
 average="Average: 6.00 +/- 3.32"
 median="Median: 6.00 [3.50,8.50] [1.00-11.00]"
 mad="MAD: 3.00"
 
-observed=$(seq 1 11 | ./avgstdev.pl)
+observed=$(seq 1 11 | $dir/../../scripts/avgstdev.pl)
 
 if [ "$(grep Total <<< "$observed")" != "$total" ]; then
   echo "Total needed to be $total"
