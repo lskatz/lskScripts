@@ -8,8 +8,7 @@ set -e
 
 source /etc/profile.d/modules.sh
 module purge
-module load samtools/1.4.1
-module load minimap2
+module load tabix samtools/1.3.1 minimap2 # medaka
 
 NSLOTS=${NSLOTS:=1}
 #NSLOTS=24
@@ -29,7 +28,9 @@ if [ "$READS" == "" ]; then
     exit 1;
 fi;
 
-which minimap2 wtdbg2 samtools wtpoa-cns
+date
+hostname
+which wtdbg2 wtpoa-cns
 
 tmpdir=$(mktemp -p . -d wtdbg2.XXXXXX)
 trap ' { echo "END - $(date)"; rm -rf $tmpdir; } ' EXIT
@@ -37,13 +38,17 @@ mkdir $tmpdir/log
 
 # Combine reads.
 # Use zcat -f -- so that it doesn't matter if it's compressed or not
-zcat -f -- $READS > $tmpdir/reads.fastq
+# Use fast compression because we value speed here.  Anyways, this 
+# is the temp dir and will be cleaned up.
+# Any compression in the first place will show some speed
+# up with disk reading later on.
+zcat -v -f -- $READS | gzip -1c > $tmpdir/reads.fastq.gz
 
 # Find the desired read length by making a table of
 # sorted read lengths vs cumulative coverage.
 # First command: find read lengths. Slow step.
 LENGTHS=$tmpdir/readlengths.txt
-cat $READS | perl -lane 'next if($. % 4 != 2); print length($_);' > $LENGTHS
+zcat $tmpdir/reads.fastq.gz | perl -lne 'next if($. % 4 != 2); print length($_);' > $LENGTHS
 
 # Second command: get the table but stop when it gets to
 # the desired coverage.
@@ -57,13 +62,8 @@ wtdbg2 -t $NSLOTS -i $tmpdir/reads.fastq -fo $tmpdir/$PREFIX.wtdbg2 -p 19 -AS 2 
 # Generate the actual assembly using wtpoa-cns
 wtpoa-cns -t $NSLOTS -i $tmpdir/$PREFIX.wtdbg2.ctg.lay.gz -o $tmpdir/$(basename $OUT)
 
-# Polishing the assembly with nanopore reads
-# Map reads vs assembly and convert to bam file in one go
-minimap2 -t $NSLOTS -x map-ont -a $tmpdir/$(basename $OUT) $tmpdir/reads.fastq | \
-  samtools view -Sb - >$tmpdir/prefix.ctg.lay.map.bam 
+cp -v $tmpdir/$(basename $OUT) $OUT
 
-# polish the assembly with mapped reads using wtpoa-cns
-samtools view $tmpdir/prefix.ctg.lay.map.bam | wtpoa-cns -t $NSLOTS -d $tmpdir/$(basename $OUT) -i - -fo $OUT ||\
-  cp -v $tmpdir/$(basename $OUT) $OUT
-
+# Polish
+#medaka_consensus -i $tmpdir/reads.fastq.gz -d ${DRAFT} -o ${CONSENSUS} -t ${NPROC}
 
