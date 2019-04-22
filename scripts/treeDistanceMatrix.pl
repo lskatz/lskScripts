@@ -2,9 +2,13 @@
 # https://www.biostars.org/p/6661/#142113
 use strict;
 use warnings;
+use Bio::TreeIO;
 
-die "Usage: $0 tree.dnd" if(!@ARGV);
-my $tree = `cat $ARGV[0]`;
+die "Usage: $0 tree.dnd" if(!@ARGV || $ARGV[0]=~/\-+h/);
+my $treeObj = Bio::TreeIO->new(-file=>$ARGV[0])->next_tree;
+$treeObj->force_binary;
+my $tree = $treeObj->as_text("newick")."\n";
+#my $tree = $treeObj->simplify_to_leaves_string();
 chomp($tree);
 
 die "Usage: $0 tree.dnd" if(!$tree);
@@ -83,4 +87,3 @@ print join("\t",'',@order),"\n";
 foreach my $i (@order)
     {print join("\t",$i,map {$dis2{$i}{$_}} @order),"\n";
     }
-close(OUT);
