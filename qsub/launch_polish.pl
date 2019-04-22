@@ -45,7 +45,8 @@ sub main{
   }
 
   # Easy to print results with cat!
-  system("cat $ref");
+  #system("cat $ref");
+  cp($ref, $$settings{outfile});
   die if $?;
   
   return 0;
