@@ -103,7 +103,8 @@ sub treeInfo{
   my($tree,$settings)=@_;
 
   my $t=Bio::TreeIO->new(-file=>$tree)->next_tree;
-  my @leaf=map{$_->id} $t->get_leaf_nodes;
+  my $unnamedNodeCounter=0;
+  my @leaf=map{$_->id || "unnamedTaxon".++$unnamedNodeCounter} $t->get_leaf_nodes;
   my @node=$t->get_nodes;
 
   my $avgBranchLength = sum(map{$_->branch_length||0} @node)/scalar(@node);
