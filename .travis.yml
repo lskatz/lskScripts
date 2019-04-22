@@ -12,4 +12,4 @@ language: shell
 addons:
   apt:
     packages:
-      -realpath
+      - realpath
