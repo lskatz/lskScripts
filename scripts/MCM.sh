@@ -8,7 +8,7 @@ set -e
 ref=$1
 draft=$2
 output=$3
-MAUVE=$(which progressiveMauve)
+MAUVE=$(which Mauve)
 jar=`dirname $MAUVE`/Mauve.jar
 echo "JAR: $jar"
 
