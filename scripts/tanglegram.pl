@@ -16,8 +16,11 @@ exit(main());
 
 sub main{
   my $settings={};
-  GetOptions($settings, qw(help tempdir outfile=s)) or die $!;
+  GetOptions($settings, qw(help tempdir outfile=s compact ratio=f column=i)) or die $!;
   $$settings{tempdir} ||= tempdir("$0.XXXXXX", TMPDIR=>1, CLEANUP=>1);
+  $$settings{compact}||=0;
+  $$settings{ratio}||=1 / 1.6180339887; # per the bioperl source code
+  $$settings{column}||=60; # per the bioperl source code
 
   my($tree1, $tree2) = @ARGV;
 
@@ -25,7 +28,7 @@ sub main{
   my $t2 = readTree($tree2,$settings);
 
   logmsg "Creating tanglegram";
-  my $tanglegram = Bio::Tree::Draw::Cladogram->new(-tree=>$t1, -second=>$t2, -compact=>0, -ratio=>1, -column=>200);
+  my $tanglegram = Bio::Tree::Draw::Cladogram->new(-tree=>$t1, -second=>$t2, -compact=>$$settings{compact}, -ratio=>$$settings{ratio}, -column=>$$settings{column});
   
   # Print to temp file
   my $eps = "$$settings{tempdir}/tanglegram.eps";
@@ -57,7 +60,7 @@ sub main{
   $eps = "$eps.eps";
 
   if($$settings{outfile}){
-    logmsg "Printing to $$settings{outfile}";
+    logmsg "Converting eps to $$settings{outfile}";
     system("convert $eps $$settings{outfile}");
     die "ERROR: could not convert $eps to $$settings{outfile}: $!" if $?;
   } else {
@@ -95,5 +98,11 @@ sub usage{
   --outfile  ''  If specified, the image will not go to
                  stdout.  The extension will dictate
                  the file format.
+
+  Bio::Tree::Draw::Cladogram options
+  See: https://metacpan.org/pod/Bio::Tree::Draw::Cladogram#new
+  --ratio    float  horizontal to vertical ratio (default: 0.618)
+  --column   int    extra space between cladograms (Default: 60)
+  --compact  Bool   ignore branch lengths (Default: off)
   "
 }
