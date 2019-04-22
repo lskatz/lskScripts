@@ -9,3 +9,7 @@ install:
   - bash tests/unittests/randTrees.pl.sh
   - bash tests/unittests/avgstdev.pl.sh
 language: shell
+addons:
+  apt:
+    packages:
+      -realpath
