@@ -38,7 +38,6 @@ sub safeRemove{
   my $treeObj=Bio::TreeIO->new(-file=>$tree)->next_tree;
 
   $treeObj=removeTaxa($treeObj,$remove,$settings);
-  $treeObj=removeSingletons($treeObj,$settings);
   
   return $treeObj;
 }
@@ -46,25 +45,54 @@ sub safeRemove{
 sub removeTaxa{
   my($tree,$remove,$settings)=@_;
 
-  my %taxaInTree=();
-  my @taxaInTree=$tree->get_leaf_nodes;
-  $taxaInTree{$_->id}=1 for(@taxaInTree);
+  my %leaf_node_id=();
+  my %ancestor_node=();
+  my @ancestor_node=();
+  my @node = $tree->get_nodes;
+  for my $node(@node){
+    if($node->is_Leaf()){
+      $leaf_node_id{$node->id}=1;
+    } else {
+      push(@ancestor_node, $node);
+      $ancestor_node{$node}=1;
+    }
+  }
 
   for my $taxon(@$remove){
-    die "ERROR: taxon $taxon does not exist in the tree!" if(!$taxaInTree{$taxon});
-    my $bool=$tree->remove_Node($taxon);
+    die "ERROR: taxon $taxon does not exist in the tree!" if(!$leaf_node_id{$taxon});
+    my $safely_removed=$tree->remove_Node($taxon);
+    if(!$safely_removed){
+      die "ERROR: could not remove $taxon safely";
+    }
   }
+
+  $tree->contract_linear_paths(1);
+
+  # Now remove all nodes that were ancestors but are now leaves
+  #my $nodes_were_removed=1;
+  #while($nodes_were_removed){
+  #  $nodes_were_removed = removeUselessNewLeafNodes($tree,\@ancestor_node);
+  #  last;
+  #}
 
   return $tree;
 }
 
-# This is actually the contract_linear_paths function
-sub removeSingletons{
-  my($tree,$settings)=@_;
+sub removeUselessNewLeafNodes{
+  my($tree,$ancestor_node)=@_;
 
-  $tree->contract_linear_paths(1);
-
-  return $tree;
+  my $nodesRemovedCounter=0;
+  for my $node(@$ancestor_node){
+    # If an ancestor node is now a leaf, prune it too
+    if($node->is_Leaf()){
+      my $safely_removed=$tree->remove_Node($node);
+      if(!$safely_removed){
+        die "ERROR: could not remove a useless ancestor node safely";
+      }
+      $nodesRemovedCounter++;
+    }
+  }
+  return $nodesRemovedCounter;
 }
 
 sub usage{
