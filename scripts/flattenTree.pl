@@ -44,6 +44,13 @@ sub flattenTree{
       }
 
       if($confidence < $minConfidence){
+        # Branch length increases by the ancestor's branch
+        # length, which we will now bypass.
+        $lineage[$i]->branch_length(
+          $lineage[$i]->branch_length + $lineage[$i]->ancestor->branch_length
+        );
+        # Bump this node up to being a descendent of the
+        # ancestor's ancestor.
         $lineage[$i]->ancestor(
           $lineage[$i]->ancestor->ancestor
         );
