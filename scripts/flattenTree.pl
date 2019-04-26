@@ -13,7 +13,7 @@ exit(main());
 
 sub main{
   my $settings={};
-  GetOptions($settings,qw(help confidence|bootstrap|min-confidence=f)) or die $!;
+  GetOptions($settings,qw(help debug confidence|bootstrap|min-confidence=f)) or die $!;
   $$settings{confidence}||=0;
 
   for my $file(@ARGV){
@@ -33,26 +33,35 @@ sub flattenTree{
     next if(!$leaf->is_Leaf());
 
     my @lineage = ($leaf,reverse($tree->get_lineage_nodes($leaf)));
+    my $numLineage = @lineage;
 
-    for(my $i=0;$i<@lineage;$i++){
-      next if(!defined($lineage[$i]->ancestor));
+    # For a flattening to work, a node must have a
+    # grandparent so that there is a "root" node.
+    # TODO: add a pseudo root node and remove it later.
+    for(my $i=0;$i<$numLineage-2;$i++){
+      #next if(!defined($lineage[$i]->ancestor));
 
-      my $confidence = $lineage[$i]->ancestor->id;
+      my $confidence = $lineage[$i+1]->id;
       $confidence //= 0;
       if(!looks_like_number($confidence)){
         next;
       }
 
       if($confidence < $minConfidence){
+        if($$settings{debug}){
+          logmsg $lineage[$i]->id." ".$confidence." < ".$minConfidence;
+        }
         # Branch length increases by the ancestor's branch
         # length, which we will now bypass.
+        my $branch_length     = $lineage[$i]->branch_length;
+        my $anc_branch_length = $lineage[$i+1]->branch_length || 0;
         $lineage[$i]->branch_length(
-          $lineage[$i]->branch_length + $lineage[$i]->ancestor->branch_length
+          $branch_length + $anc_branch_length
         );
         # Bump this node up to being a descendent of the
         # ancestor's ancestor.
         $lineage[$i]->ancestor(
-          $lineage[$i]->ancestor->ancestor
+          $lineage[$i+2]
         );
       }
     }
@@ -84,5 +93,6 @@ sub usage{
 
   Usage: $0 tree.dnd [tree2.dnd...] > out.dnd
   --confidence   0  Minimum confidence for flattening a tree
+  --debug           Print debugging information to stderr
   "
 }
