@@ -45,9 +45,8 @@ echo "Min length for $LONGREADCOVERAGE coverage will be $MINLENGTH";
 # Assemble.
 module purge
 module load wtdbg2/2.4
-wtdbg2 -t $NSLOTS -i $dir/all.fastq.gz -fo $dir/wtdbg2 -p 19 -AS 2 -s 0.05 -L $MINLENGTH -g $GENOMELENGTH -X $LONGREADCOVERAGE || \
-  continue
+wtdbg2 -t $NSLOTS -i $dir/all.fastq.gz -fo $dir/wtdbg2 -p 19 -AS 2 -s 0.05 -L $MINLENGTH -g $GENOMELENGTH -X $LONGREADCOVERAGE
+
 # Generate the actual assembly using wtpoa-cns
-wtpoa-cns -t $NSLOTS -i $dir/wtdbg2.ctg.lay.gz -o $dir/unpolished.fasta ||\
-  continue
+wtpoa-cns -t $NSLOTS -i $dir/wtdbg2.ctg.lay.gz -o $dir/unpolished.fasta 
 
