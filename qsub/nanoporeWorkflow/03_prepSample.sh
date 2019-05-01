@@ -29,7 +29,7 @@ hostname
 
 # Setup tempdir
 tmpdir=$(mktemp -p . -d prepfastq.XXXXXX)
-#trap ' { echo "END - $(date)"; rm -rf $tmpdir; } ' EXIT
+trap ' { echo "END - $(date)"; rm -rf $tmpdir; } ' EXIT
 mkdir $tmpdir/log
 echo "$0: temp dir is $tmpdir";
 
