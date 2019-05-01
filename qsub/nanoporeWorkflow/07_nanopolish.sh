@@ -62,6 +62,7 @@ fi
 RANGES=$(python $(which nanopolish_makerange.py) $dir/unpolished.fasta --overlap-length 1000 --segment-length 10000);
 export numRanges=$(wc -l <<< "$RANGES")
 echo "RANGES: $(tr '\n' ' ' <<< "$RANGES")"
+echo "Calling variants on $numRanges ranges in the assembly. Progress bar will show one dot per range skipped due to previous results."
 echo "0" > $dir/rangesCounter.txt
 echo "$RANGES" | xargs -P $NSLOTS -n 1 bash -c '
   window="$0";
@@ -76,6 +77,7 @@ echo "$RANGES" | xargs -P $NSLOTS -n 1 bash -c '
 
   # Do not redo results
   if [ -e "$dir/.$window-vcf" ]; then
+    echo -ne ".";
     exit
   fi
 
@@ -85,7 +87,10 @@ echo "$RANGES" | xargs -P $NSLOTS -n 1 bash -c '
   # Record that we finished these results
   touch $dir/.$window-vcf
 '
+echo
+
 # Run merge on vcf files
+echo "nanopolish vcf2fasta"
 nanopolish vcf2fasta -g $dir/unpolished.fasta $dir/consensus.*.vcf > $dir/polished.fasta
 
 # help with some level of compression in the folder
