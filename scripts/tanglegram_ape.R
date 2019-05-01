@@ -16,13 +16,8 @@ treefile1 <- args$tree1
 treefile2 <- args$tree2
 outfile   <- args$outfile
 
-#print("Loading libraries")
-#library(phytools,  quietly=TRUE)
-#library(dendextend,quietly=TRUE)
-#library(ape,       quietly=TRUE)
 myReturn <- suppressPackageStartupMessages(c(
   library(phytools,  quietly=TRUE),
-  #library(dendextend,quietly=TRUE),
   library(ape,       quietly=TRUE)
 ));
 
@@ -31,8 +26,8 @@ outbreak <- read.delim('/scicomp/home/gzu2/projects/mashtree/data/katzEtAl/Lyve-
 tree1 <- ladderize(midpoint.root(read.tree(treefile1)))
 tree2 <- ladderize(midpoint.root(read.tree(treefile2)))
 
-tree1 <- reorder(tree1, "postorder")
-tree2 <- reorder(tree2, "postorder")
+#tree1 <- reorder(tree1, "postorder")
+#tree2 <- reorder(tree2, "postorder")
 
 # Default minimum length
 min_length <- 0.000000000000000000001
@@ -46,10 +41,10 @@ maybeoutbreakIndex <- match(outbreak$sample[outbreak$outbreak==-1],tree1$tip.lab
 myColors <- c()
 myColors[outbreakIndex]      <- 'red'
 myColors[nonoutbreakIndex]   <- 'blue'
-myColors[maybeoutbreakIndex] <- 'green'
+myColors[maybeoutbreakIndex] <- 'gray'
 
 association <- cbind(tree1$tip.label, tree1$tip.label)
-png(outfile)
-cophyloplot(tree1, tree2, assoc = association, space = 100, length.line=0, gap=1, show.tip.label=F, col = myColors)
-dev.off()
+png(outfile);
+cophyloplot(tree1, tree2, assoc = association, space = 100, length.line=0, gap=1, show.tip.label=F, col = myColors);
+myReturn <- dev.off();
 
