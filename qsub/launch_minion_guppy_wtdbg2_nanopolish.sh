@@ -81,27 +81,26 @@ for dir in $tmpdir/demux/barcode*; do
   module load nanopolish/0.11.1
   module load minimap2
   module load samtools/1.8
+  module load tabix/0.2.6
   # Index the reads
   nanopolish index -d $FAST5DIR $dir/all.fastq.gz
   # Map the reads to get a bam
-  minimap2 -x map-ont -t $NSLOTS $dir/unpolished.fasta $dir/all.fastq.gz | \
-    samtools view -bS -T $dir/unpolished.fasta - - > $dir/unsorted.bam
+  minimap2 -a -x map-ont -t $NSLOTS $dir/unpolished.fasta $dir/all.fastq.gz | \
+    samtools view -bS -T $dir/unpolished.fasta > $dir/unsorted.bam
   samtools sort -l 1 $dir/unsorted.bam > $dir/reads.bam
   rm $dir/unsorted.bam
 
   # Start a loop based on suggested ranges using nanopolish_makerange.py
   # but invoke it with python
-  for window in $(python $(which nanopolish_makerange.py) $dir/unpolished.fasta); do
-    echo "WINDOW: $window"; 
-    nanopolish variants --consensus $dir/consensus.$window.fasta -r $dir/all.fastq.gz \
-      -b $dir/reads.bam -g $dir/unpolished.fasta -t $NSLOTS \
-      --min-candidate-frequency 0.1 --min-candidate-depth 20 -w "$window" > $dir/consensus.$window.vcf || \
-      continue
-  done;
-
-  # Run merge but worst case, just copy over the unpolished data
-  nanopolish_merge.py $dir/consensus.*.fasta > $dir/polished.fasta || \
-    cp -v $dir/unpolished.fasta $dir/polished.fasta
+  python nanopolish_makerange.py $dir/unpolished.fasta | \
+    xargs -P $NSLOTS -n 1 bash -c '
+      window="$0";
+      dir="'$dir'";
+      nanopolish variants --consensus -r $dir/all.fastq.gz -b $dir/reads.bam -g $dir/unpolished.fasta -t 1 --min-candidate-frequency 0.1 --min-candidate-depth 20 -w "$window" > $dir/consensus.$window.vcf;
+      #bgzip $dir/consensus.$window.vcf # help with some level of compression in the folder
+    '
+  # Run merge on vcf files
+  nanopolish vcf2fasta -g $dir/unpolished.fasta $dir/consensus.*.vcf > $dir/polished.fasta
 
   cp -v $dir/polished.fasta $OUTDIR/$BARCODE.fasta
 
