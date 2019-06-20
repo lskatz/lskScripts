@@ -1,4 +1,4 @@
-#!/bin/bash -l
+#!/bin/bash 
 
 # Runs mash sketch on a set of fasta files
 
@@ -23,26 +23,32 @@ CTRL_FILE="$TMP/array.txt"
 echo "$FASTA" | tr ' ' '\n'  > $CTRL_FILE
 echo "CTRL_FILE is $CTRL_FILE"
 
+source /etc/profile.d/modules.sh
 module purge
 module load Mash
 module load gcc/5.5
 mash --version # ensure it loaded
 
-qsub -N mashSketch -o $TMP/log -j y -pe smp 1 -V -cwd -t 1-$(cat $CTRL_FILE | wc -l) \
+qsub -q edlb.q -N mashSketch -o $TMP/log -j y -pe smp 1 -V -cwd -t 1-$(cat $CTRL_FILE | wc -l) \
   -v "CTRL_FILE=$CTRL_FILE" <<- "END_OF_SCRIPT"
   #!/bin/bash -l
+
   set -e
   set -u
+  set -x
 
+  hostname
   # Reload modules to ensure things like LD_LIBRARY_PATH are re-added
+  source /etc/profile.d/modules.sh || true
   module purge
   module load Mash
   module load gcc/5.5
+
   mash --version # ensure it loaded
-  hostname
 
   # Set up filenames
   fasta=$(sed -n ${SGE_TASK_ID}p $CTRL_FILE);
+  mkdir /scratch/$USER || true
   tmpdir=$(mktemp --tmpdir=/scratch/$USER --directory qsubMash.XXXXXXXX)
   trap ' { rm -rf $tmpdir; } ' EXIT
 
