@@ -30,7 +30,14 @@ sub main{
     for(my $j=0;$j<$numTaxa;$j++){
       print $taxon[$i]."\t".$taxon[$j];
       for(my $k=0;$k<$numFiles;$k++){
-        print "\t".$dist{$file[$k]}{$taxon[$i]}{$taxon[$j]};
+        my $singleDist = $dist{$file[$k]}{$taxon[$i]}{$taxon[$j]};
+        if(!defined($singleDist)){
+          $singleDist = $dist{$file[$k]}{$taxon[$j]}{$taxon[$i]};
+        }
+        if(!defined($singleDist)){
+          die "ERROR: distance not found:\n".Dumper [$k,$file[$k]], [$i,$taxon[$i]], [$j, $taxon[$j]];
+        }
+        print "\t".$singleDist;
       }
       print "\n";
     }
