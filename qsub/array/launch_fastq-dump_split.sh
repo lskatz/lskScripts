@@ -3,14 +3,23 @@
 # Modified from a script by Taylor Griswold <ycj5@cdc.gov>
 
 # Read ARGV
-DOWNLOAD_LIST=$1
+OUTDIR=$1
+DOWNLOAD_LIST=$2
 SLOTS_PER_JOB=1 # manually change this as needed
 
 if [ "DOWNLOAD_LIST" == "" ]; then
   echo "Executes the sratoolkit module into an array batch job."
-  echo "Assumes directory structure of XXX"
   echo "Text file has white-space delimited SRA run IDs"
-  echo "Usage: $0 run_ids.txt"
+  echo "Usage: $0 outdir run_ids.txt"
+  exit 1;
+fi
+
+if [ ! -d $OUTDIR ]; then
+  echo "ERROR: $OUTDIR is not a directory";
+  exit 1;
+fi
+if [ ! -e "$DOWNLOAD_LIST" ]; then
+  echo "ERROR: $DOWNLOAD_LIST could not be found";
   exit 1;
 fi
 
@@ -29,7 +38,7 @@ echo "CTRL_FILE is $CTRL_FILE"
 
 
 qsub -N FastqDump -q edlb.q -o $TMP/log -j y -pe smp $SLOTS_PER_JOB -V -cwd -t 1-$(cat $CTRL_FILE | wc -l) \
-  -v "CTRL_FILE=$CTRL_FILE","DOWNLOAD_LIST=$DOWNLOAD_LIST" <<- "END_OF_SCRIPT"
+  -v "OUTDIR=$OUTDIR" -v "CTRL_FILE=$CTRL_FILE","DOWNLOAD_LIST=$DOWNLOAD_LIST" <<- "END_OF_SCRIPT"
   #!/bin/bash -l
   set -e
   source /etc/profile.d/modules.sh
@@ -46,7 +55,7 @@ qsub -N FastqDump -q edlb.q -o $TMP/log -j y -pe smp $SLOTS_PER_JOB -V -cwd -t 1
   mkdir -p $tmpdir
   outdir=$(mktemp --tmpdir=$tmpdir --directory FastqDump.XXXXXX);
   trap "rm -rf $outdir" EXIT
-  newdir="$SRRID"
+  newdir="$OUTDIR/$SRRID.fastq-dump"
 
   if [ -e "$newdir" ]; then
     echo "ERROR: found pre-existing dir $newdir. Will not continue.";
