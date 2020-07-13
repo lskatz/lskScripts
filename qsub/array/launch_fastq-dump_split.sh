@@ -7,17 +7,20 @@ OUTDIR=$1
 DOWNLOAD_LIST=$2
 SLOTS_PER_JOB=1 # manually change this as needed
 
-if [ "DOWNLOAD_LIST" == "" ]; then
+if [ "$DOWNLOAD_LIST" == "" ]; then
+  scriptName=$(basename $0)
   echo "Executes the sratoolkit module into an array batch job."
   echo "Text file has white-space delimited SRA run IDs"
-  echo "Usage: $0 outdir run_ids.txt"
+  echo "Usage: $scriptName outdir run_ids.txt"
   exit 1;
 fi
 
-if [ ! -d $OUTDIR ]; then
+if [ -f $OUTDIR ]; then
   echo "ERROR: $OUTDIR is not a directory";
   exit 1;
 fi
+mkdir -pv $OUTDIR
+
 if [ ! -e "$DOWNLOAD_LIST" ]; then
   echo "ERROR: $DOWNLOAD_LIST could not be found";
   exit 1;
