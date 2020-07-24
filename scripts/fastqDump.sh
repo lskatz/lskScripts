@@ -41,7 +41,9 @@ else
   fi
   cd -
 
+  # Compress fastq files
   for fastq in $tempdir/*.fastq; do 
+    # Remove quality defline with perl before compressing
     perl -lane '
       if($. % 4 == 3){
         $_="+";
