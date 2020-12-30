@@ -183,7 +183,6 @@ sub bioPhyloDist{
     push(@obs, @$obsTmp);
   }
   $observedQ->enqueue(undef); # kill the printer thread
-  END{$printTreeQueue->join;} # Join this whenever the script is done
   @obs = sort {$a<=>$b} (shuffle(@obs))[0..$$settings{numobserved}-1];
   my $obs = sprintf("%0.2f",sum(@obs)/scalar(@obs));
 
@@ -231,6 +230,7 @@ sub bioPhyloDist{
     $p=cdf($obs,$avg,$stdev);
   }
   
+  $printTreeQueue->join;
   return {Z=>$Z, p=>$p, obs=>$obs, num=>scalar(@scores), avg=>$avg, stdev=>$stdev, query=>$query, ref=>$ref};
 
 }
@@ -326,6 +326,10 @@ sub observedScore{
   } elsif($method eq 'rf'){
     $obs=$refObj->calc_symdiff($queryObj);
     $obs=$obs*2; # this version of RF always returns a single-sided value
+  } elsif($method eq 'nrf'){
+    $obs=$refObj->calc_symdiff($queryObj);
+    $obs=$obs*2; # this version of RF always returns a single-sided value
+    $obs=$obs / (2*($refObj->get_ntax() - 3));
   } else {
     die "ERROR: method $method is not implemented";
   }
@@ -346,6 +350,7 @@ sub usage{
   --method    kf     kf:  kuhner-felsenstein (branch length distance)
                      kf2: branch length score (k-f squared)
                      rf:  robinson-foulds (symmetric distance)
+                     nrf: normalized robinson-foulds (symmetric distance)
                      WARNING: the kf and kf2 metrics do not produce
                      the same values as R-phangorn or Phylip-treedist.
   --numobserved  1   Repeat the calculation between the observed

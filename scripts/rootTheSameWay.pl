@@ -121,13 +121,29 @@ sub findNode{
       #}
     }
   }
-  die "Could not find common root with the heuristic.";
+  warn "Could not find common root with the heuristic.";
 
 
   # If all else fails, just try every node and reroot
 
   # look at all nodes and find the one with the correct descendents
-  #for my $node($tree->get_nodes)
+  for my $node($tree->get_nodes){
+    if($node->each_Descendent < 2){
+      next;
+    }
+
+    my @sortedQueryId;
+    do{
+      last if(!$node->ancestor || !$node->get_Descendents);
+      @sortedQueryId = sort {$a cmp $b} map {$_->id} grep {$_->is_Leaf} $node->get_all_Descendents;
+      if("@sortedLeafIds" eq "@sortedQueryId"){
+        $node->id("theRoot");
+        return $node;
+      }
+      $node=$node->ancestor;
+    } while(@sortedQueryId < $numLeaves);
+  }
+
 }
 
 

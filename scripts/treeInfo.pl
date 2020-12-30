@@ -14,7 +14,7 @@ exit(main());
 
 sub main{
   my $settings={};
-  GetOptions($settings,qw(help taxa confidence|bootstrap min-confidence all cutoff=f diff)) or die $!;
+  GetOptions($settings,qw(help list=s taxa confidence|bootstrap min-confidence all cutoff=f diff)) or die $!;
   $$settings{cutoff}||=0;
 
   # If the user wants all output then set it.
@@ -36,6 +36,13 @@ sub main{
   my %taxa;
   my @taxa;
   for my $t(@tree){
+    if(my $thing_to_list = $$settings{list}){
+      my $listing = treeCategoryList($thing_to_list, $t, $settings);
+      for my $item(@$listing){
+        print $item."\n";
+      }
+      next;
+    }
     my $taxa=treeInfo($t,$settings);
     for(@$taxa){
       push(@taxa,@$taxa);
@@ -149,6 +156,43 @@ sub treeInfo{
   return \@leaf;
 }
 
+sub treeCategoryList{
+  my($thing_to_list, $tree, $settings) = @_;
+
+  $thing_to_list = lc($thing_to_list);
+  my @list;
+  my $sortOrder = 'abc';
+
+  my $t=Bio::TreeIO->new(-file=>$tree)->next_tree;
+  # taxon names, bootstrap values, branch lengths
+  for my $node($t->get_nodes){
+    if($thing_to_list =~ /bootstrap|confidence/){
+      next if($node->is_Leaf);
+      push(@list, $node->bootstrap || $node->id || 100);
+      $sortOrder = '123';
+    } elsif($thing_to_list =~ /tax/){
+      next if(! $node->is_Leaf);
+      my $id = $node->id || '';
+      push(@list, $id);
+      $sortOrder = 'abc';
+    } elsif($thing_to_list =~ /branch|length/){
+      my $length = $node->branch_length || 0;
+      push(@list, $length);
+      $sortOrder = '123';
+    } else {
+      die "ERROR: you provided --list but I do not understand the value $thing_to_list";
+    }
+  }
+
+  if($sortOrder eq '123'){
+    @list = sort{$a <=> $b} @list;
+  } else {
+    @list = sort{$a cmp $b} @list;
+  }
+
+  return \@list;
+}
+
 sub median
 {
     my @vals = sort {$a <=> $b} @_;
@@ -171,6 +215,7 @@ sub usage{
   $0=basename $0;
   "$0: gives information about a phylogeny
   Usage: $0 tree.dnd [tree2.dnd...]
+  --list      '' List either: taxa, bootstrap, branches
   --taxa         Shows taxon names
   --confidence   Average confidence/bootstrap values
   --cutoff     0 Do not consider confidence values below this value

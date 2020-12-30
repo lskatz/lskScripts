@@ -5,14 +5,6 @@
 #$ -o kraken.log -j y
 #$ -N kraken
 
-# The aspen module for kraken is broken, and so I just have
-# to assume Kraken is in the path.
-
-source /etc/profile.d/modules.sh
-#module load kraken/0.10.4
-module load kraken/0.10.5
-module load krona/2.5
-
 function logmsg () {
   script=$(basename $0);
   echo -e "$script: $@" >&2;
@@ -29,18 +21,23 @@ NSLOTS=${NSLOTS-8}
 KRAKEN_DEFAULT_DB=${KRAKEN_DEFAULT_DB-/scicomp/reference/kraken/0.10.4/mini-20140330}
 
 if [ $# -eq 0 ]; then
-  logmsg "Usage: $0 out.html reads_1.fastq.gz reads_2.fastq.gz [more_1.fastq.gz more_2.fastq.gz ...]";
+  logmsg "Usage: $0 out.kraken/ reads_1.fastq.gz reads_2.fastq.gz [more_1.fastq.gz more_2.fastq.gz ...]";
   logmsg "NOTE: KRAKEN_DEFAULT_DB is currently set to $KRAKEN_DEFAULT_DB"
   exit 1;
 fi;
 
-# Output HTML is the first arg.
+source /etc/profile.d/modules.sh
+module load kraken/1.0.0
+module load krona/2.5
+
+# Output is the first arg.
 # The rest of the args are reads.
-HTML=$1; shift;
+OUTDIR=$1; shift;
 READS=$@;
 
-if [ -e $HTML ]; then
-  echo "ERROR: html file $HTML already exists! I will not overwrite it."
+if [ -e $OUTDIR ]; then
+  echo "ERROR: dir $OUTDIR already exists! I will not overwrite it."
+  #echo "DEBUG"; rm -rvf $OUTDIR; 
   exit 1;
 fi
 
@@ -52,12 +49,15 @@ KRONADIR=$(dirname $(which ktImportText));
 TEMPDIR=$(mktemp --directory --suffix=$(basename $0));
 KRAKENOUT="$TEMPDIR/kraken.out"
 KRAKENTAXONOMY="$TEMPDIR/kraken.taxonomy";
+KRAKENREPORT="$TEMPDIR/kraken.report"
+HTML="$TEMPDIR/out.html"
 
 function cleanup () {
   rm -rvf $TEMPDIR
 }
 trap cleanup EXIT
 
+hostname
 logmsg "tempdir is $TEMPDIR\n  kraken dir is $KRAKENDIR\n  krona dir is $KRONADIR";
 
 run $KRAKENDIR/kraken --fastq-input --paired --db=$KRAKEN_DEFAULT_DB --preload --gzip-compressed --quick --threads $NSLOTS --output $KRAKENOUT $READS
@@ -76,9 +76,11 @@ head -n 1 $KRAKENOUT | cut -f 3 >> $KRAKENTAXONOMY
 cat $KRAKENTAXONOMY
 
 run $KRONADIR/ktImportText -o $HTML $KRAKENTAXONOMY
+run kraken-report $KRAKENOUT > $KRAKENREPORT
+perl -lane ' print if($F[0] > 0.00); ' < $KRAKENREPORT > $KRAKENREPORT.filtered
 
-logmsg "DONE. Results will be deleted from $TEMPDIR in two seconds."
+rm -v $KRAKENOUT
+cp -rv $TEMPDIR $OUTDIR
 
-sleep 2
-
+logmsg "DONE!"
 

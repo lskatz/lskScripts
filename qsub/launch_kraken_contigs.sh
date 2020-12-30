@@ -10,7 +10,7 @@
 
 source /etc/profile.d/modules.sh
 #module load kraken/0.10.4
-module load kraken/0.10.5
+module load kraken/1.0.0
 module load krona/2.5
 export PATH=$PATH:~/src/lskScripts/scripts
 
@@ -64,8 +64,5 @@ translate-kraken-contigs.pl $KRAKENOUT | sort -k1,1nr > $KRAKENTAXONOMY
 
 run $KRONADIR/ktImportText -o $HTML $KRAKENTAXONOMY
 
-logmsg "DONE. Results will be deleted from $TEMPDIR in two seconds."
-
-sleep 2
 
 

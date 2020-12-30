@@ -9,8 +9,7 @@ contigs=$1
 genome=$2
 
 source /etc/profile.d/modules.sh
-module load prokka/1.10
-module load tbl2asn/24.3
+module load prokka/1.13.3
 
 genus=${3-genus}
 species=${4-species}
