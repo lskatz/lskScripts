@@ -84,8 +84,8 @@ sub translateKraken2{
 }
 
 sub usage{
-  print "$0: changes kraken raw output to a format for ktImportText in Krona
-  Usage: $0 [options] kraken.out
+  print "$0: changes kraken report to a format for ktImportText in Krona
+  Usage: $0 [options] kraken.report
   --help   This useful help menu
 
   Output is tab delimited:
