@@ -14,10 +14,11 @@ exit(main());
 sub main{
   my $settings={};
   GetOptions($settings,qw(help presence=s absence=s)) or die $!;
-  die usage($settings) if($$settings{help} || !@ARGV);
 
   $$settings{presence} //= "A";
   $$settings{absence}  //= "N";
+
+  die usage($settings) if($$settings{help} || !@ARGV);
 
   # Get the sorted arguments so that they are uniform
   # and not random in each of the methods below,
