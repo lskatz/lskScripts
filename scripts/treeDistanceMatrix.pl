@@ -3,6 +3,9 @@
 use strict;
 use warnings;
 use Bio::TreeIO;
+use Data::Dumper;
+
+sub logmsg{print STDERR "$0: @_\n";}
 
 die "Usage: $0 tree.dnd" if(!@ARGV || $ARGV[0]=~/\-+h/);
 my $treeObj = Bio::TreeIO->new(-file=>$ARGV[0])->next_tree;
