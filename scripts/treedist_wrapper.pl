@@ -296,7 +296,8 @@ sub observedScore{
           && defined(my $parent=$node->get_parent) 
           && defined(my $grandparent = $node->get_parent->get_parent)
         ){
-          $branch_length += $parent->get_branch_length;
+          my $parentBranchLength = $parent->get_branch_length || 0;
+          $branch_length += $parentBranchLength;
           $node->set_branch_length($branch_length);
           $node->set_parent($grandparent);
           #logmsg "Set the parent ". $node->get_name." with length ".$node->get_branch_length;
