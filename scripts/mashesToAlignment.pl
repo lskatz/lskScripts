@@ -15,8 +15,8 @@ sub main{
   my $settings={};
   GetOptions($settings,qw(help presence=s absence=s)) or die $!;
 
-  $$settings{presence} //= "A";
-  $$settings{absence}  //= "N";
+  $$settings{presence} //= "1";
+  $$settings{absence}  //= "0";
 
   die usage($settings) if($$settings{help} || !@ARGV);
 
@@ -47,12 +47,14 @@ sub readSketches{
 
   my %p; # presence/absence
   for my $file(@$sketches){
+    print STDERR ".";
     my $msh = Bio::Sketch::Mash->new($file);
     my $sketches=$$msh{sketches}[0]{hashes};
     for my $s(@$sketches){
       $p{$s}{$file}=1;
     }
   }
+  print STDERR "\n";
 
   return \%p;
 }
@@ -100,5 +102,10 @@ sub usage{
   --absence   The nucleotide to use for an absent hash integer
               default: $$settings{absence}
   --help      This useful help menu
+
+  suggested workflow:
+  $0 ... 
+  goalign reformat phylip -i binary.fasta > binary.fasta.phylip
+  raxmlHPC -f a -s binary.fasta.phylip -n \$prefix -T \$numcpus -p \$RANDOM -x \$RANDOM -N 100 -m BINGAMMA
   \n";
 }
