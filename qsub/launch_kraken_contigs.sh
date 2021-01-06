@@ -10,8 +10,6 @@
 
 source /etc/profile.d/modules.sh
 #module load kraken/0.10.4
-module load kraken/1.0.0
-module load krona/2.5
 export PATH=$PATH:~/src/lskScripts/scripts
 
 function logmsg () {
@@ -34,6 +32,10 @@ if [ $# -eq 0 ]; then
   logmsg "NOTE: KRAKEN_DEFAULT_DB is currently set to $KRAKEN_DEFAULT_DB"
   exit 1;
 fi;
+
+# load modules after help menu
+module load kraken/1.0.0
+module load krona/2.5
 
 OUTDIR=$1
 ASM=$2
