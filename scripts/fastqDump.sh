@@ -5,6 +5,8 @@ module load sratoolkit/2.9.1
 
 SRR=$1
 
+R1="${SRR}_1.fastq.gz";
+
 script=$(basename $0);
 if [ "$SRR" == "" ]; then
   echo "Downloads a fastq properly using fastq-dump"
@@ -16,8 +18,8 @@ if [ -e "${SRR}.fastq.gz" ]; then
   echo "${SRR}.fastq.gz is already present."
   exit 1
 fi
-if [ -e "${SRR}_1.fastq.gz" ]; then
-  echo "${SRR}_1.fastq.gz is already present."
+if [ -e "$R1" ]; then
+  echo "$R1 is already present."
   exit 1
 fi
 
@@ -38,6 +40,10 @@ else
   if [ $? -gt 0 ]; then 
     echo "ERROR with fasterq-dump and $SRR"
     exit 1
+  fi
+  if [ ! -e "$R1" ]; then 
+    echo "ERROR: R1 not present in filename $R1";
+    exit 1;
   fi
   cd -
 
