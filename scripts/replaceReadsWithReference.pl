@@ -24,18 +24,26 @@ sub main{
   return 0;
 }
 
+# Print the fastq file from the bam
 sub printFastq{
   my($bam, $refFasta, $settings) = @_;
 
-  open(my $fh, "samtools view '$bam' |") or die "ERROR using samtools view on $bam: $!";
+  open(my $fh, "samtools sort -n '$bam' | samtools view -f 1 |") or die "ERROR using samtools view on $bam: $!";
   while(my $line = <$fh>){
     chomp($line);
     my($qname, $flag, $rname, $pos, $mapq, $cigar, $rnext, $pnext, $tlen, $seq, $qual) = 
         split(/\t/, $line);
 
+    # add /1 or /2
+    if($flag & 0x40){
+      $qname .= "/1";
+    }
+    if($flag & 0x80){
+      $qname .= "/2";
+    }
+
     # if the read is not unmapped then replace with reference
-    ...;
-    if(! $flag & 4){
+    if(! ($flag & 0x4)){
       my $refHit = referenceHit($rname, $pos, $cigar, $refFasta, $settings);
       $seq = $refHit;
       $qname .= " replaced";
@@ -45,6 +53,7 @@ sub printFastq{
   }
 }
 
+# Get the sequence of the reference genome at the mapped position
 sub referenceHit{
   my($rname, $pos, $cigar, $refFasta, $settings) = @_;
 
@@ -65,12 +74,17 @@ sub referenceHit{
     }
   }
 
+  if($length < 1){
+    die "INTERNAL ERROR: length of reference hit for this mapped read is <1" . Dumper \@_;
+  }
+
+  # Grab the reference hit
   my $stopPos = $pos + $length - 1;
   my $refHit = `samtools faidx $refFasta '$rname:$pos-$stopPos' | tail -n +2`;
   die "ERROR running samtools faidx on $refFasta" if $?;
   chomp($refHit);
   $refHit =~ s/\n//g;
-  $refHit =~ tr/[a-z]/[A-Z]/;
+  $refHit =~ tr/[a-z]/[A-Z]/; # uppercase
 
   return $refHit;
 }
@@ -82,3 +96,4 @@ sub usage{
   ";
   exit 0;
 }
+
