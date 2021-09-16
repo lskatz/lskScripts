@@ -49,6 +49,11 @@ sub printFastq{
       $qname .= " replaced";
     }
 
+    # Sanity check to match the lengths of seq and qual
+    if(length($seq) != length($qual)){
+      logmsg "WARNING: seq is not the same length as qual for $qname";
+    }
+
     print "\@$qname\n$seq\n+\n$qual\n";
   }
 }
