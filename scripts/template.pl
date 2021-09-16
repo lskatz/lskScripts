@@ -13,14 +13,15 @@ exit(main());
 sub main{
   my $settings={};
   GetOptions($settings,qw(help)) or die $!;
-  die usage() if($$settings{help});
+  usage() if($$settings{help});
 
   return 0;
 }
 
 sub usage{
-  "$0: does something
+  print "$0: does something
   Usage: $0 [options] arg1
   --help   This useful help menu
-  "
+  ";
+  exit 0;
 }
