@@ -1,4 +1,4 @@
-#!/usr/bin/env perl 
+#!/usr/bin/env perl
 
 use warnings;
 use strict;
@@ -31,7 +31,7 @@ sub printFastq{
   open(my $fh, "samtools sort -n '$bam' | samtools view -f 1 |") or die "ERROR using samtools view on $bam: $!";
   while(my $line = <$fh>){
     chomp($line);
-    my($qname, $flag, $rname, $pos, $mapq, $cigar, $rnext, $pnext, $tlen, $seq, $qual) = 
+    my($qname, $flag, $rname, $pos, $mapq, $cigar, $rnext, $pnext, $tlen, $seq, $qual) =
         split(/\t/, $line);
 
     # add /1 or /2
@@ -51,7 +51,15 @@ sub printFastq{
 
     # Sanity check to match the lengths of seq and qual
     if(length($seq) != length($qual)){
-      logmsg "WARNING: seq is not the same length as qual for $qname";
+      my$bp = length($seq) - length($qual);
+      logmsg "WARNING: seq is not the same length as qual for $qname($bp bp)";
+      # Adjust to match shortest length
+      if(length($seq) > length($qual)){
+        $seq = substr($seq, 0, length($qual));
+      }else{
+        $qual = substr($qual, 0, length($seq));
+      }
+
     }
 
     print "\@$qname\n$seq\n+\n$qual\n";
@@ -101,4 +109,3 @@ sub usage{
   ";
   exit 0;
 }
-
