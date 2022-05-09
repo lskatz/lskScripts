@@ -8,8 +8,7 @@
 #$ -cwd -V
 #$ -o spades.log
 #$ -j y
-#$ -N SPAdes3.11.0
-#$ -q all.q
+#$ -N SPAdes3.15.3
 
 forward=$1
 reverse=$2
@@ -25,8 +24,8 @@ if [ "$out" == "" ]; then
   exit 1;
 fi;
 
-module load SPAdes/3.11.0
-if [ $? -gt 0 ]; then echo "unable to load spades 3.11.0"; exit 1; fi;
+module load SPAdes/3.15.3
+if [ $? -gt 0 ]; then echo "unable to load spades 3.15.3"; exit 1; fi;
 
 NSLOTS=${NSLOTS:=1}
 
