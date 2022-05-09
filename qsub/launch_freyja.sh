@@ -5,9 +5,9 @@
 #$ -S /bin/bash
 #$ -pe smp 1
 #$ -cwd -V
-#$ -o frejya
+#$ -o freyja.log
 #$ -j y
-#$ -N frejya
+#$ -N freyja
 
 ref=$1; shift
 outdir=$1; shift
@@ -27,6 +27,9 @@ set -e
 set -u
 
 module purge
+
+source ~/.bash_conda > /dev/null 2>&1 || echo "Could not find bash file for loading conda"
+conda activate freyja  || echo "could not activate freyja env"
 
 which ivar
 which freyja

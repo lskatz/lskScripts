@@ -4,7 +4,7 @@
 # Workflow taken from Dorian Feistel
 
 #$ -S /bin/bash
-#$ -pe smp 4-16
+#$ -pe smp 1
 #$ -cwd -V
 #$ -o baym.log
 #$ -j y
@@ -13,7 +13,7 @@
 
 outdir=$1; shift
 reads=$@
-NSLOTS=${NSLOTS:=12}
+NSLOTS=${NSLOTS:=1}
 
 source /etc/profile.d/modules.sh
 scriptname=$(basename $0);
@@ -86,11 +86,11 @@ for R1 in $reads; do
 
     echo "SAMPLE(S): $(cat $local_sample_ID | tr '\n' ',')"
 
-    bash -x trim_reads_nwss.sh . $trim_dir $local_sample_ID
+    bash trim_reads_nwss.sh . $trim_dir $local_sample_ID
 
     echo
 
-    bash -x run_kallisto_WG.sh $local_sample_ID $trim_dir/ivar $kallisto
+    bash run_kallisto_WG.sh $local_sample_ID $trim_dir/ivar $kallisto
 
   # Moving back out of the sample directory
   cd -
