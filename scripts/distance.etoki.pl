@@ -21,14 +21,16 @@ sub main{
   }
 
   my @fasta = @ARGV;
-  print join("\t", qw(fasta1 fasta2 dist))."\n";
+  print join("\t", qw(fasta1 fasta2 dist numAllelesSame numLociSame))."\n";
   for(my $i=0;$i<@fasta;$i++){
     for(my $j=$i+1; $j<@fasta; $j++){
       my $dist = percentIdentical($fasta[$i], $fasta[$j], $settings);
       print join("\t", 
         # sort genome1 and genome2 to make the output more predictable
         sort({$a cmp $b } ($fasta[$i], $fasta[$j])) ,
-        $dist
+        sprintf("%0.2f",$$dist{identity}),
+        $$dist{numAllelesSame},
+        $$dist{numLociSame},
       );
       print "\n";
     }
@@ -58,7 +60,12 @@ sub percentIdentical{
   }
 
   my $percentIdentical = $numAllelesInCommon / $numLociInCommon;
-  return $percentIdentical;
+  my $return = {
+    identity => $percentIdentical, 
+    numAllelesSame => $numAllelesInCommon,
+    numLociSame => $numLociInCommon,
+  };
+  return $return;
 }
 
 sub readFastaDeflines{
