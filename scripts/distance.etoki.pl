@@ -8,19 +8,29 @@ use File::Basename qw/basename/;
 use List::MoreUtils qw/uniq/;
 use threads;
 use Thread::Queue;
+use threads::shared;
+
+# Make a global hash with deflines
+my %globalDefline;
+# Keep track of the order in which they were added
+my @deflineAddedOrder;
+# Only one thread at a time can add/delete from this cache using this shared var
+my $deflineLock :shared;
 
 local $0 = basename $0;
-sub logmsg{my $tid=threads->tid; local $0=basename $0; print STDERR "$0 (TID:$tid): @_\n";}
+sub logmsg{local $|=1; my $tid=threads->tid; local $0=basename $0; print STDERR "$0 (TID:$tid): @_\n";}
 exit(main());
 
 sub main{
   my $settings={};
-  GetOptions($settings,qw(help metric=s numcpus=i debug)) or die $!;
+  GetOptions($settings,qw(help mem=i metric=s numcpus=i debug)) or die $!;
   usage() if($$settings{help} || @ARGV < 2);
   $$settings{numcpus} ||= 1;
+  $$settings{mem} ||= 0;
 
   if($$settings{metric}){
     logmsg "WARNING: --metric is not configured in this script";
+    ...;
   }
 
   my @fasta = @ARGV;
@@ -128,6 +138,16 @@ sub readFastaDeflines{
 
   my %defline;
 
+  # Check if the defline is in the cache and if so,
+  # grab it. Lock this step just in case the cache
+  # is being modified elsewhere.
+  {
+    lock($deflineLock);
+    if(defined $globalDefline{$fasta}){
+      return $globalDefline{$fasta};
+    }
+  }
+
   open(my $fh, $fasta) or die "ERROR reading $fasta: $!";
   while(<$fh>){
     # only read deflines for this operation
@@ -164,6 +184,25 @@ sub readFastaDeflines{
   }
   close $fh;
 
+  # If %globalDefline is too large, delete an entry
+  {
+    lock($deflineLock);
+    if($$settings{mem} > 0 && scalar(keys(%globalDefline)) > $$settings{mem}){
+      my $toDelete = shift(@deflineAddedOrder);
+      delete($globalDefline{$toDelete});
+      logmsg "Removed from cache: $toDelete" if($$settings{debug});
+    }
+  }
+
+  # Remember these deflines to avoid costly future file IO costs 
+  # Set the lock in case the cache is being acted upon
+  {
+    lock($deflineLock);
+    $globalDefline{$fasta} = \%defline;
+    logmsg "Added to cache: $fasta" if($$settings{debug});
+    push(@deflineAddedOrder, $fasta);
+  }
+
   return \%defline;
 }
 
@@ -171,10 +210,12 @@ sub usage{
   print "$0: pairwise distance between two MLST results from EToKi
   Usage: $0 [options] *.etoki.fasta
     where etoki.fasta files are EToKi results with MLST deflines
-  --metric which distance metric to use (default: identity)
-  --debug  Print useful debugging messages
+  OPTIONS
+  --metric  which distance metric to use (default: identity)
+  --debug   Print useful debugging messages
   --numcpus Default:1. Tentative sweet spot: 8
-  --help   This useful help menu
+  --mem     How many etoki allele results to keep in memory (default: 0 which keeps all)
+  --help    This useful help menu
 ";
   exit 0;
 }
