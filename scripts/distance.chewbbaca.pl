@@ -48,16 +48,26 @@ sub main{
   my $numFasta = @fasta;
   for(my $i=0; $i<$numFasta; $i++){
     for(my $j=$i+1; $j<$numFasta; $j++){
-      push(@comparison, [$fasta[$i], $fasta[$j]]);
+      push(@comparison,
+        [sort {$a cmp $b} ($fasta[$i], $fasta[$j]) ]
+      );
     }
   }
-  logmsg scalar(@comparison)." comparisons set up.";
+  my $numComparisons = scalar(@comparison);
+  logmsg "$numComparisons comparisons set up.";
 
+  # Start off printing the table
   print join("\t", qw(sample1 sample2 identity numSame numCompared))."\n";
+  my $i=0;
   for my $c(@comparison){
+    # Get the distances for this comparison
     my $dist = allelicDistance($allele{$$c[0]}, $allele{$$c[1]}, $settings);
     print join("\t", $$c[0], $$c[1], $$dist{identity}, $$dist{numSame}, $$dist{numCompared});
     print "\n";
+
+    if(++$i % 10000 == 0){
+      logmsg "$i distances calculated";
+    }
   }
   
   return 0;
