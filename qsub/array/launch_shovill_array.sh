@@ -39,14 +39,14 @@ echo "  Waiting 1 second in case you want to ctrl-c..."
 
 # Might as well start loading the environment before sleeping
 module purge
-export PATH=$PATH:$HOME/bin/shovill-1.0.9/bin
-module load SPAdes/3.13.0 Skesa/2.3.0 megahit/1.1.2 velvet/1.2.10 lighter/1.1.1 flash/1.2.11 samtools/1.9 bwa/0.7.17 Mash/2.0 seqtk/1.3 pilon/1.22 trimmomatic/0.35 perl/5.16.1-MT
+export PATH=$HOME/bin/shovill-v1.1.0/bin:$PATH
+module load SPAdes/3.13.0 Skesa/2.3.0 megahit/1.1.2 velvet/1.2.10 lighter/1.1.1 flash/1.2.11 samtools/1.9 bwa/0.7.17 seqtk/1.3 pilon/1.22 trimmomatic/0.35 perl/5.16.1-MT kmc/3.0 java/jdk1.8.0_301
 sleep 1
 
 # See if we have all the right components
 shovill --check
 
-qsub -q all.q -N ShovillSpades -o $tmpdir/log -j y -pe smp 1 -V -cwd -t 1-$(cat $CTRL_FILE | wc -l) \
+qsub -q all.q -q edlb.q -N ShovillSpades -o $tmpdir/log -j y -pe smp 4-6 -l h_vmem=72G -V -cwd -t 1-$(cat $CTRL_FILE | wc -l) \
   -v "tmpdir=$tmpdir" -v "CTRL_FILE=$CTRL_FILE" -v "OUTDIR=$OUTDIR" <<- "END_OF_SCRIPT"
   #!/bin/bash -l
   set -e
@@ -80,7 +80,7 @@ qsub -q all.q -N ShovillSpades -o $tmpdir/log -j y -pe smp 1 -V -cwd -t 1-$(cat 
 
   shovill --check
 
-  shovill --R1 $R1 --R2 $R2 --outdir $sampledir --assembler spades --cpus $NSLOTS --force
+  shovill --R1 $R1 --R2 $R2 --outdir $sampledir --assembler spades --cpus $NSLOTS --force --tmpdir /scratch --ram 64
   cp -v $sampledir/contigs.fa $fastaOut
   # trap command will remove $sampledir
 
