@@ -65,11 +65,13 @@ qsub -N ncbi_wgmlst -o $tmpdir/log -j y -pe smp 1 -V -cwd -t 1-$(cat $CTRL_FILE 
   stdout=$sampledir/wgmlst.out
   log=$sampledir/wgmlst.log
 
-  date # mark how long this takes
-  set -x
-  wgmlst --genome $fasta --alleles $DB --cores $NSLOTS --kmer 15 --output_mappings $mappings --output_loci $alleles  1>$stdout 2> $log
-  set +x
-  date
+  (
+    date # mark how long this takes
+    set -x
+    wgmlst --genome $fasta --alleles $DB --cores $NSLOTS --kmer 15 --output_mappings $mappings --output_loci $alleles 
+    set +x
+    date
+  ) 1>$stdout 2>$log
 
   ls -lh $sampledir
   mv -v $sampledir $finalout
