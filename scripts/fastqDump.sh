@@ -28,7 +28,8 @@ if [ -e "$R1" ]; then
 fi
 
 module purge
-module load sratoolkit/2.9.1
+#module load sratoolkit/2.9.1
+module load sratoolkit/2.11.3
 
 # Check if fasten_sort is in the path and if not, quit
 echo "Checking dependency paths"
