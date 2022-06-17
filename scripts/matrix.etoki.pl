@@ -35,6 +35,10 @@ sub main{
 
   my $loci = lociFromDatabase($$settings{database}, $settings);
 
+  # Print off the header with assembly name and loci
+  print join("\t", "assembly", @$loci)."\n";
+
+  # Print each row of the matrix, one per assembly
   my @fasta = @ARGV;
   for(my $i=0; $i<@fasta; $i++){
     my $gappedMatrix = gappedMatrix($fasta[$i], $loci, $settings);
