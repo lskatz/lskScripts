@@ -32,6 +32,9 @@ sub main{
     logmsg "WARNING: --metric is not configured in this script";
     ...;
   }
+  if($$settings{numcpus} > 1){
+    logmsg "NOTE: only using one cpu for this script despite --numcpus";
+  }
 
   my @tsv = @ARGV;
   my %allele;
@@ -129,6 +132,7 @@ sub readAlleleTsv{
     $line =~ s/LNF/-1/g;
     $line =~ s/LOTSC/-1/g;
     $line =~ s/PLOT[53]?/-1/g;
+    $line =~ s/A[LS]M/-1/g;
 
     my ($file, @F) = split(/\t/, $line);
     my %F;
