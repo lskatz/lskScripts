@@ -24,7 +24,7 @@ exit(main());
 sub main{
   my $settings={};
   GetOptions($settings,qw(help database=s)) or die $!;
-  usage() if($$settings{help} || @ARGV < 2);
+  usage() if($$settings{help} || @ARGV < 1);
   $$settings{mem} ||= 0;
   $$settings{database} || die "ERROR: need --database";
 
