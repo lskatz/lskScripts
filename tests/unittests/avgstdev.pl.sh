@@ -3,6 +3,7 @@
 set -e
 
 dir=$(realpath $(dirname $0));
+export PATH=$dir/../../scripts:$PATH
 
 total="Total: 66"
 average="Average: 6.00 +/- 3.32"

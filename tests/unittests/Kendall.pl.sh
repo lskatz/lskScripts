@@ -1,6 +1,7 @@
 #!/bin/bash
 set -e
 dir=$(realpath $(dirname $0));
+export PATH=$dir/../../scripts:$PATH
 
 lambda0=$($dir/../../scripts/Kendall.pl --alreadyrooted --lambda 0 $dir/input/kendall-colijn1.dnd $dir/input/kendall-colijn2.dnd | tail -n 1 | cut -f 4)
 if [ "$lambda0" != "2.00" ]; then

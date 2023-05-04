@@ -1,7 +1,8 @@
 #!/bin/bash
-
 set -e
+
 dir=$(realpath $(dirname $0));
+export PATH=$dir/../../scripts:$PATH
 
 tree=$($dir/../../scripts/randTrees.pl --numTrees 1 $dir/input/kendall-colijn1.dnd)
 bytes=$(wc -c <<< $tree)
