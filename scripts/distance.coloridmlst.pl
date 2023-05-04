@@ -33,6 +33,7 @@ sub main{
     ...;
   }
 
+  # Get all allele calls into memory
   my @tsv = @ARGV;
   my %allele;
   for my $file(@tsv){
@@ -72,13 +73,13 @@ sub main{
   # Since there will be no more comparisons generated after this,
   # also send the termination signal to the threads.
   # Send a multiplier of how many are batch-dequeued times the number of threads.
-  my @undef = (undef) x ((10**5) * scalar(@thr));
+  my @undef = (undef) x scalar(@thr);
   $Q->enqueue(@undef);
   #logmsg "Enqueued termination signal by sending ".scalar(@undef)." terms";
 
   # Wait for threads to finish
   for(@thr){
-    #logmsg "Joining TID".$_->tid;
+    # logmsg "Joining TID".$_->tid;
     $_->join;
   }
 
@@ -93,22 +94,16 @@ sub allelicDistanceWorker{
   # Counter for status updates
   my $numCompared = 0;
 
-  # Because enqueue() is a slow step, send 10000 lines for 
+  # locking and printing is a slow step, send 10000 lines for 
   # printing at a time.
   my @distBuffer = ();
 
-  DEQUEUE:
-  while(my @arr = $Q->dequeue(10**4)){
-    for my $c(@arr){
-      if(!defined($c)){
-        logmsg "DONE found term signal";
-        last DEQUEUE;
-      }
-      my $dist = allelicDistance($$alleles{$$c[0]}, $$alleles{$$c[1]}, $settings);
-      push(@distBuffer, 
-        join("\t", $$c[0], $$c[1], $$dist{identity}, $$dist{numSame}, $$dist{numCompared})
-      );
-    }
+  while(my $c = $Q->dequeue){
+    my $dist = allelicDistance($$alleles{$$c[0]}, $$alleles{$$c[1]}, $settings);
+    push(@distBuffer, 
+      join("\t", $$c[0], $$c[1], $$dist{identity}, $$dist{numSame}, $$dist{numCompared})
+    );
+    next if(@distBuffer < (10 ** 7));
 
     lock($printLock);
     $numCompared += scalar(@distBuffer);
@@ -116,11 +111,14 @@ sub allelicDistanceWorker{
     for(@distBuffer){
       print $_ ."\n";
     }
-    #$printerQ->enqueue(@distBuffer);
     @distBuffer = ();
   }
+  lock($printLock);
+  for(@distBuffer){
+    print $_ ."\n";
+  }
   $numCompared += scalar(@distBuffer);
-  #$printerQ->enqueue(@distBuffer);
+  @distBuffer = ();
   logmsg "DONE! Sent $numCompared comparisons to print from this thread";
 }
 
@@ -196,8 +194,8 @@ sub readAlleleTsv{
 }
 
 sub usage{
-  print "$0: pairwise distance between MLST results from ColorID, using its process_MLST.py function
-  Usage: $0 [options] colorid.detailed.tsv
+  print "$0: pairwise distance between MLST results from ColorID, using alleles.tsv
+  Usage: $0 [options] alleles.tsv [alleles2.tsv...]
   OPTIONS
   --metric  which distance metric to use (default: identity)
   --debug   Print useful debugging messages

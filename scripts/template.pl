@@ -22,6 +22,6 @@ sub usage{
   print "$0: does something
   Usage: $0 [options] arg1
   --help   This useful help menu
-  ";
+  \n";
   exit 0;
 }

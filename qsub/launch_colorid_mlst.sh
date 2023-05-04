@@ -5,9 +5,9 @@
 #$ -S /bin/bash
 #$ -pe smp 1
 #$ -cwd -V
-#$ -o EToKi.log
+#$ -o colorid
 #$ -j y
-#$ -N EToKi
+#$ -N colorid
 
 outdir=$1
 dbdir=$2
@@ -33,10 +33,13 @@ module purge
 colorid=$(which colorid_bv || which colorid)
 process_MLST=$(which process_MLST.py)
 
-tmpdir=$(mktemp --directory --suffix=$(basename $0));
+tmpdir=$(mktemp --directory --suffix=$(basename $0) --tmpdir=./);
 trap ' { rm -rf $tmpdir; } ' EXIT
 
-mkdir -pv $outdir || echo "WARNING: outdir already exists: $outdir"
+if [ -e $outdir ]; then
+  echo "WARNING: outdir already exists: $outdir"
+  exit 1
+fi
 
 bxi="$tmpdir/asm.bxi"
 
@@ -53,7 +56,7 @@ echo -e "$(basename $asm .fasta)\t$asm" > $fofn
 
 $colorid build -b $bxi -s $bxi_size -n 2 -k 39 -t $NSLOTS -r $fofn
 
-$colorid search -ms -b $bxi.bxi -q $dbdir/*.fasta > $alleles
+$colorid search -ms -b $bxi -q $dbdir/*.fasta > $alleles
 sed -i.bak '/\*/d' $alleles
 $process_MLST $alleles $tmpdir/mlst
 

@@ -30,7 +30,7 @@ set -u
 
 module purge
 
-source ~/.bash_conda > /dev/null 2>&1 || echo "Could not find bash file for loading conda"
+source ~/.bash_conda || echo "Could not find bash file for loading conda"
 conda activate etoki || echo "could not activate etoki env"
 
 EToKi.py configure

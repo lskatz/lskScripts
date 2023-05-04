@@ -15,9 +15,10 @@ exit main();
 
 sub main{
   my $settings={};
-  GetOptions($settings,qw(help tree|trees|treeout=s tsv=s verbose reroot! min-taxa=i)) or die $!;
+  GetOptions($settings,qw(help tree|trees|treeout=s tsv=s verbose reroot! min-outgroup=i min-taxa=i)) or die $!;
   $$settings{reroot}//=1;
   $$settings{'min-taxa'}//=0;
+  $$settings{'min-outgroup'}//=0;
   $$settings{tree}||="";
   my @tree=@ARGV;
 
@@ -61,6 +62,7 @@ sub main{
       # ... unless the user supplies --reroot
       if($$settings{reroot}){
         @ancestorNodes=grep {!$_->is_Leaf} $treeObjOrig->get_nodes;
+        logmsg "getting all ".scalar(@ancestorNodes)." ancestor nodes";
       }
       # Every rerooted tree should have this many leaves.
       # Not sure why bioperl has an issue with rerooting
@@ -71,8 +73,22 @@ sub main{
       my @allResults=();
       for my $node(@ancestorNodes){
         # Copy this tree over so that we don't mess up the original
-        my $treeObj=Bio::Tree::Tree->new(-root=>$node, -nodelete=>1);
-        next if($numLeaves != scalar(grep {$_->is_Leaf} $treeObj->get_nodes));
+        my $treeObj = $treeObjOrig; #->clone(); # Bio::Tree::Tree->new(-root=>$node, -nodelete=>1);
+        # Reroot the tree if the current node is not already the root node
+        if(!defined($treeObj)){
+          logmsg "SKIP: Tree somehow not defined with node ".$node->internal_id;
+          next;
+        }
+        my $rootNode = $treeObj->get_root_node;
+        if($rootNode->internal_id ne $node->internal_id){
+          $treeObj->reroot($node);
+        }
+
+        my $numLeavesHere = scalar(grep {$_->is_Leaf} $treeObj->get_nodes);
+        if($numLeaves != $numLeavesHere){
+          logmsg "SKIP: number of original leaves $numLeaves do not match the tree leaves count here $numLeavesHere";
+          next;
+        }
 
         # This is the meat of the script:
         # Get the metrics of the tree into $m
@@ -80,6 +96,12 @@ sub main{
         # Check if there are useful values. If not, then
         # don't record the results.
         if(!$$m{baseTaxon}){
+          logmsg "SKIP: results don't have baseTaxon";
+          next;
+        }
+
+        if(@{$$m{outgroupTaxa}} < $$settings{'min-outgroup'}){
+          logmsg "SKIP: results for this tree have too few in the outgroup";
           next;
         }
         push(@allResults,$m);
@@ -91,19 +113,21 @@ sub main{
 
       # Find the best metrics based on each reroot.
       # Sorted metrics array
+      logmsg "Comparing ".scalar(@allResults)." results";
       my @m = sort{$$b{Snsp} <=> $$a{Snsp} || $$b{Sn} <=> $$a{Sn} || $$b{Sp} <=> $$a{Sp}} @allResults;
-      my %m=%{$m[0]}; # I don't feel like typing this whole variable name
-      print join("\t",basename($t), $m{baseTaxon},$m{levelsFromRoot},scalar(@{$m{sisterTaxa}}), $m{Sn}, $m{Sp}, $m{Snsp});
-      #print "\t".join(",",@{$m{outgroupTaxa}});
-      print "\t".scalar(@{$m{outgroupTaxa}});
-      print "\n";
+      for(my $i=0;$i<@m;$i++){
+        my %m=%{$m[$i]}; # I don't feel like typing this whole variable name
+        print join("\t",basename($t), $m{baseTaxon},$m{levelsFromRoot},scalar(@{$m{sisterTaxa}}), $m{Sn}, $m{Sp}, $m{Snsp});
+        print "\t".scalar(@{$m{outgroupTaxa}});
+        print "\n";
+      }
 
       # If we want to record the rerooted trees...
-      if($$settings{tree}){
-        $treeout->write_tree($m{tree});
-        # add an extra newline for readability
-        $treeout->_print("\n");
-      }
+      #if($$settings{tree}){
+      #  $treeout->write_tree($m{tree});
+      #  # add an extra newline for readability
+      #  $treeout->_print("\n");
+      #}
     }
   }
   if($$settings{tree}){
@@ -206,6 +230,7 @@ sub constraintTree{
       # exponential penalty.
       next if($sn < 0.01);
       next if($sp < 0.01);
+      next if(!$node->id);
 
       next if($numDescendents < $$settings{'min-taxa'});
 
@@ -343,6 +368,7 @@ sub usage{
                         If not set, then it will be set to the number
                         of status-associated isolates found in the 
                         tree.
+  --min-outgroup 1      Number of taxa that must be in the outgroup
   --trees     file.dnd  Place final rerooted tree(s) in this file
   --tsv       [rqr'd]   The spreadsheet
   "
