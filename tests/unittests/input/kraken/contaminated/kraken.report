@@ -1,0 +1,15 @@
+  0.00	0	0	U	0	unclassified
+100.00	111249	91	-	1	root
+ 99.92	111158	1	-	131567	  cellular organisms
+ 99.92	111157	64	D	2	    Bacteria
+ 99.86	111093	101	P	1224	      Proteobacteria
+ 61.18	68060	22	C	1236	        Gammaproteobacteria
+ 61.16	68038	7	O	118969	          Legionellales
+ 61.15	68031	1	F	444	            Legionellaceae
+ 61.15	68030	87	G	445	              Legionella
+ 61.07	67943	67943	S	446	                Legionella pneumophila
+ 38.59	42932	47	C	28216	        Betaproteobacteria
+ 38.55	42885	0	O	206351	          Neisseriales
+ 38.55	42885	0	F	481	            Neisseriaceae
+ 38.55	42885	13056	G	482	              Neisseria
+ 26.81	29829	29829	S	485	                Neisseria gonorrhoeae
