@@ -55,12 +55,12 @@ jobs:
             #/usr/share/miniconda
           key: conda-${{ runner.os }}--${{ runner.arch }}--${{ steps.get-date.outputs.today }}-perl_v${{ matrix.perl }}--${{env.CACHE_NUMBER}}
         env:
-          CACHE_NUMBER: 1
+          CACHE_NUMBER: 2
       - name: conda installations
         shell: bash -el {0}
         if: steps.cache-conda.outputs.cache-hit != 'true'
         run: | 
-          mamba install -y perl-app-cpanminus perl-bioperl
+          mamba install -y perl-app-cpanminus perl-bioperl perl-statistics-descriptive bats-core
       - name: check installation
         shell: bash -el {0}
         run: | 
@@ -77,11 +77,8 @@ jobs:
         run:  |
           sudo apt-get update
           sudo apt-get -y install ca-certificates
-          cpanm --verbose 'Math::Gauss' 'Statistics::Descriptive'
+          cpanm --verbose 'Math::Gauss' 
       - name: Run tests
         run: |
-          echo "foo bar"
-          bash tests/unittests/Kendall.pl.sh
-          bash tests/unittests/randTrees.pl.sh
-          bash tests/unittests/avgstdev.pl.sh
+          bats tests/unittests/*.bats
 
