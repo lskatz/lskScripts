@@ -21,6 +21,7 @@ sub main{
 
   # print header first
   print join("\t", qw(
+    file
     BestGuess GuessPercent
     Rank
     Contaminant ContaminantPercent
@@ -31,6 +32,7 @@ sub main{
     my $guesses = guessTaxon($taxfile, $settings);
 
     print join("\t",
+      $taxfile,
       $$guesses{guess}{taxname},
       $$guesses{guess}{percent},
       $$guesses{guess}{rank},
@@ -82,6 +84,9 @@ sub guessTaxon{
   for my $rank(reverse @sortedRank){
     $bestGuess{$rank} //= [];
     for my $taxHash(sort {$$b{percent} <=> $$a{percent}} @{ $bestGuess{$rank} }){
+      # If we get a good match, starting with highest percentage
+      # of reads and going down, then save that into
+      # %guessedTaxon and quit the loop.
       if($$taxHash{percent} > $$settings{minpercent}){
         %guessedTaxon = %$taxHash;
       }
@@ -110,7 +115,9 @@ sub guessTaxon{
 
 
 sub usage{
-  print "$0: Reads a Kraken report and prints a table of what the sample appears to be and then the majority contaminant.
+  print "$0: Reads a Kraken report and prints a table of what
+  the sample appears to be and then the majority contaminant.
+
   Usage: $0 [options] kraken.report another.report
   --min-percent What percent of reads have to be attributed
                 to a taxon before presuming it as the taxon
