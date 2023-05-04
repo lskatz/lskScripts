@@ -77,10 +77,11 @@ jobs:
         run:  |
           sudo apt-get update
           sudo apt-get -y install ca-certificates
+          cpanm --verbose 'Math::Gauss'
       - name: Run tests
         run: |
           echo "foo bar"
-          #bash tests/unittests/Kendall.pl.sh
-          #bash tests/unittests/randTrees.pl.sh
-          #bash tests/unittests/avgstdev.pl.sh
+          bash tests/unittests/Kendall.pl.sh
+          bash tests/unittests/randTrees.pl.sh
+          bash tests/unittests/avgstdev.pl.sh
 
