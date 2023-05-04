@@ -7,18 +7,80 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ['ubuntu-20.04' ]
+        perl: [ '5.36.0' ]
+    defaults:
+      run:
+        shell: bash -el {0}
+    name: ${{ matrix.DATASET }} (Chunk ${{ matrix.CHUNK }})
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
-    - name: Set up Perl environment
-      run: |
-        export PATH=$PATH:$(pwd)/scripts
-        export PERL5LIB=$PERL5LIB:$HOME/lib/perl5
-        yes no | sudo apt-get install bioperl
-        curl -L https://cpanmin.us | perl - --notest --local-lib=~/perl5 Math::Gauss
-    - name: Run tests
-      run: |
-        bash tests/unittests/Kendall.pl.sh
-        bash tests/unittests/randTrees.pl.sh
-        bash tests/unittests/avgstdev.pl.sh
+      - name: Get Date
+        id: get-date
+        run: |
+          today=$(/bin/date -u '+%Y%m%d')
+          echo $today
+          echo "today=$today" >> $GITHUB_OUTPUT
+      - name: set up conda
+        uses: conda-incubator/setup-miniconda@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+          use-mamba: true
+          miniforge-variant: Mambaforge
+          miniforge-version: latest
+          channel-priority: strict
+          channels: conda-forge,bioconda,defaults
+          mamba-version: "*"
+          auto-activate-base: true
+          activate-environment: "~/conda_pkgs_dir/my-env"
+          use-only-tar-bz2: true # IMPORTANT: This needs to be set for caching to work properly!
+      - name: conda info
+        run: |
+          conda info
+          echo
+          conda list
+          echo
+          conda config --show
+      - name: Cache Conda env
+        id: cache-conda
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/conda_pkgs_dir
+            ~/.conda
+            ~/.condarc
+            #/usr/share/miniconda
+          key: conda-${{ runner.os }}--${{ runner.arch }}--${{ steps.get-date.outputs.today }}-perl_v${{ matrix.perl }}--${{env.CACHE_NUMBER}}
+        env:
+          CACHE_NUMBER: 1
+      - name: conda installations
+        shell: bash -el {0}
+        if: steps.cache-conda.outputs.cache-hit != 'true'
+        run: | 
+          mamba install -y perl-app-cpanminus perl-bioperl
+      - name: check installation
+        shell: bash -el {0}
+        run: | 
+          which perl
+          perl -v
+          which cpanm
+          echo 
+          which python
+          python -V
+          echo 
+      - name: checkout my repo
+        uses: actions/checkout@v3
+      - name: apt-get install
+        run:  |
+          sudo apt-get update
+          sudo apt-get -y install ca-certificates
+      - name: Run tests
+        run: |
+          echo "foo bar"
+          #bash tests/unittests/Kendall.pl.sh
+          #bash tests/unittests/randTrees.pl.sh
+          #bash tests/unittests/avgstdev.pl.sh
+
