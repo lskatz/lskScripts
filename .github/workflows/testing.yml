@@ -10,15 +10,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout code
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
     - name: Set up Perl environment
       run: |
         export PATH=$PATH:$(pwd)/scripts
         export PERL5LIB=$PERL5LIB:$HOME/lib/perl5
         yes no | sudo apt-get install bioperl
         curl -L https://cpanmin.us | perl - --notest --local-lib=~/perl5 Math::Gauss
-    - name: Install dependencies
-      run: sudo apt-get install realpath
     - name: Run tests
       run: |
         bash tests/unittests/Kendall.pl.sh
