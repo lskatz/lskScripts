@@ -16,7 +16,7 @@ jobs:
     defaults:
       run:
         shell: bash -el {0}
-    name: ${{ matrix.DATASET }} (Chunk ${{ matrix.CHUNK }})
+    name: ${{ matrix.os }} perl ${{ matrix.perl }}
     steps:
       - name: Get Date
         id: get-date
@@ -77,7 +77,7 @@ jobs:
         run:  |
           sudo apt-get update
           sudo apt-get -y install ca-certificates
-          cpanm --verbose 'Math::Gauss'
+          cpanm --verbose 'Math::Gauss' 'Statistics::Descriptive'
       - name: Run tests
         run: |
           echo "foo bar"
