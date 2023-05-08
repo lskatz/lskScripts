@@ -109,7 +109,7 @@ sub mlst{
     $Q->enqueue(undef);
   }
 
-  logmsg "  Waiting on threads, and then I will merge the results."
+  logmsg "  Waiting on threads, and then I will merge the results.";
   open(my $resultFh, ">", $results) or die "ERROR: could not write to larger results file: $!";
   for my $t(@thr){
     local $/=undef;
