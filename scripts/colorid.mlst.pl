@@ -22,18 +22,19 @@ sub main{
   my $settings={};
   GetOptions($settings,qw(help k=i numcpus=i tempdir=s)) or die $!;
   usage() if(@ARGV < 2 || $$settings{help});
+
+  # Set some default variables
   $$settings{tempdir} //= tempdir("$0.XXXXXX", CLEANUP=>1, TMPDIR=>1);
   $$settings{k}       ||= 39;
+  # sanity check on k
   $$settings{k} >= 3 || die "ERROR: --k should be >= 3";
   $$settings{numcpus} ||= 1;
+
+  logmsg "Temporary directory will be at $$settings{tempdir}";
 
   which("colorid") or die "ERROR: could not find colorid in your path!";
 
   my $mlstDir = shift(@ARGV);
-
-  #logmsg "Reading the MLST directory";
-  #my $mlstFasta = readMlstFastas($mlstDir, $settings);
-  #die system("head $mlstFasta");
 
   logmsg "Making samples file for building the bigsi db";
   my $samplesFile = buildSamples(\@ARGV, $settings);
@@ -44,6 +45,7 @@ sub main{
   logmsg "Transforming hits into alleles";
   my $profiles = profiles($search, $settings);
 
+  # Print the profiles file to stdout
   open(my $fh, $profiles) or die "ERROR: could not open for reading $profiles: $!";
   while(<$fh>){
     print;
@@ -68,6 +70,7 @@ sub buildSamples{
 }
 
 
+# Build the bigsi database
 sub buildDb{
   my($samplesTsv, $settings) = @_;
 
@@ -84,6 +87,8 @@ sub buildDb{
 }
 
 
+# Run the colorid search function
+# in threads
 sub mlst{
   my($mlstDir, $bxi, $settings) = @_;
 
@@ -92,6 +97,8 @@ sub mlst{
   my @fasta = glob("$mlstDir/*.fasta");
 
   # Chunk the fasta files into the queue
+  # Currently enqueuing 100 at a time.
+  # This will let us load the bigsi db fewer times per thread.
   my $Q = Thread::Queue->new();
   while(@fasta){
     $Q->enqueue(
@@ -109,6 +116,7 @@ sub mlst{
     $Q->enqueue(undef);
   }
 
+  # Merge all the threads results files into one
   logmsg "  Waiting on threads, and then I will merge the results.";
   open(my $resultFh, ">", $results) or die "ERROR: could not write to larger results file: $!";
   for my $t(@thr){
@@ -125,6 +133,7 @@ sub mlst{
   return $results;
 }
 
+# This is the threads for `colorid search`
 sub mlstWorker{
   my($Q, $bxi, $settings) = @_;
 
@@ -136,6 +145,7 @@ sub mlstWorker{
   open(my $resultsFh, ">", $results) or die "ERROR: could not write to $results: $!";
 
   while(defined(my $fastas = $Q->dequeue)){
+    # Each dequeue yields a chunk of fasta files
     my $fastaStr = join(" ", @$fastas);
     system("colorid search -b $bxi -q $fastaStr -m -s > $results.tmp 2>$log");
     if($?){
@@ -161,11 +171,14 @@ sub mlstWorker{
   return $results;
 }
 
+# Read the hits file from colorid and make a profiles file:
+# a file with one line per sample and one locus/allele per col
 sub profiles{
   my($hits, $settings) = @_;
 
   my $profilesFile = "$$settings{tempdir}/profiles.tsv";
 
+  # Make a 2d hash of sample => {locus=>allele}
   my %allele;
   my %locusIndex;
   open(my $fh, $hits) or die "ERROR: could not open $hits: $!";
@@ -173,12 +186,14 @@ sub profiles{
     chomp;
     my($locusAllele, $sample, $length, $identity) = split /\t/;
 
+    # Right split
     my($locus, $allele) = $locusAllele =~ /(.+)_(.+)/;
     $allele{$sample}{$locus} = $allele;
     $locusIndex{$locus}++;
   }
   close $fh;
 
+  # Print to the profiles file
   open(my $outFh, ">", $profilesFile) or die "ERROR: could not write to $profilesFile: $!";
 
   my @sortedLocus = sort{$a cmp $b} keys(%locusIndex);
@@ -199,88 +214,15 @@ sub profiles{
 }
 
 
-# Read the cgMLST directory and return a single fasta file
-sub readMlstFastas{
-  my($mlstDir, $settings)=@_;
-
-  my $newFasta = "$$settings{tempdir}/query.fasta";
-  open(my $fh, ">", $newFasta) or die "ERROR: writing to $newFasta: $!";
-
-  for my $f(glob("$mlstDir/*.fasta")){
-
-    # Read this file, sequence by sequence
-    my ($n, $slen, $comment, $qlen) = (0, 0, 0);
-    my @aux = undef;
-    my ($id, $sequence);
-    open(my $inFh, $f) or die "ERROR: could not read $f: $!";
-    while ( ($id, $sequence, undef) = readfq($inFh, \@aux)) {
-      next if(length($sequence) < $$settings{k});
-      # Avoid low complexity homopolymers
-      next if($sequence =~ /A{30,}|C{30,}|G{30,}|T{30,}/);
-      # Avoid lots of ambiguities (5+ Ns)
-      next if($sequence =~ /N{5,}/);
-      print $fh ">$id\n$sequence\n";
-    }
-    close $inFh;
-  }
-  close $fh;
-
-  return $newFasta;
-}
-
-# Read fq subroutine from Andrea which was inspired by lh3
-sub readfq {
-    my ($fh, $aux) = @_;
-    @$aux = [undef, 0] if (!(@$aux)); # remove deprecated 'defined'
-    return if ($aux->[1]);
-    if (!defined($aux->[0])) {
-        while (<$fh>) {
-            chomp;
-            if (substr($_, 0, 1) eq '>' || substr($_, 0, 1) eq '@') {
-                $aux->[0] = $_;
-                last;
-            }
-        }
-        if (!defined($aux->[0])) {
-            $aux->[1] = 1;
-            return;
-        }
-    }
-    my $name = /^.(\S+)/? $1 : '';
-    my $comm = /^.\S+\s+(.*)/? $1 : ''; # retain "comment"
-    my $seq = '';
-    my $c;
-    $aux->[0] = undef;
-    while (<$fh>) {
-        chomp;
-        $c = substr($_, 0, 1);
-        last if ($c eq '>' || $c eq '@' || $c eq '+');
-        $seq .= $_;
-    }
-    $aux->[0] = $_;
-    $aux->[1] = 1 if (!defined($aux->[0]));
-    return ($name, $seq) if ($c ne '+');
-    my $qual = '';
-    while (<$fh>) {
-        chomp;
-        $qual .= $_;
-        if (length($qual) >= length($seq)) {
-            $aux->[0] = undef;
-            return ($name, $seq, $comm, $qual);
-        }
-    }
-    $aux->[1] = 1;
-    return ($name, $seq, $comm);
-}
-
 sub usage{
-  print "$0: runs colorid/mlst on a sample
-  Usage: $0 [options] MLST.db/ *.fasta *.fastq.gz
+  print "$0: runs colorid/mlst on samples and produces a profiles.tsv in stdout
+  Usage: $0 [options] MLST.db/ *.fasta *.fastq.gz > profiles.tsv
   MLST.db     The MLST database of fasta files, one fasta per locus
   *.fasta *.fastq.gz can be any number of sequence files
 
   -k          kmer length [default: 39]
   --tempdir   Alternative location for temporary directory
+  --numcpus   Default: 1
   --help      This useful help menu
   \n";
   exit 0;
