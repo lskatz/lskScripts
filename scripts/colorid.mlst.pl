@@ -36,14 +36,16 @@ sub main{
 
   my $mlstDir = shift(@ARGV);
 
-  logmsg "Making samples file for building the bigsi db";
+  logmsg "Making samples tsv file for building the bigsi db";
   my $samplesFile = buildSamples(\@ARGV, $settings);
+  logmsg "Recording all loci from the schema";
+  my $sortedLoci = readLoci($mlstDir, $settings);
   logmsg "Making the bigsi db";
   my $db = buildDb($samplesFile, $settings);
   logmsg "Searching the MLST database";
   my $search = mlst($mlstDir, $db, $settings);
   logmsg "Transforming hits into alleles";
-  my $profiles = profiles($search, $settings);
+  my $profiles = profiles($search, $sortedLoci, $settings);
 
   # Print the profiles file to stdout
   open(my $fh, $profiles) or die "ERROR: could not open for reading $profiles: $!";
@@ -67,6 +69,33 @@ sub buildSamples{
   close $fh;
 
   return $samplesTsv;
+}
+
+# Get a sorted list of loci from the MLST database
+sub readLoci{
+  my($dir, $settings) = @_;
+
+  my %locus;
+
+  for my $fasta(glob("$dir/*.fasta")){
+    open(my $fh, $fasta) or die "ERROR: could not read fasta file $fasta: $!";
+    while(<$fh>){
+      chomp;
+      if(/^>(.+)_(.+?)\s*/){
+        my $locus = $1;
+
+        # Don't use loci with timestamps
+        next if($locus =~ /:/);
+
+        $locus{$locus}++;
+      }
+    }
+    close $fh;
+  }
+
+  my @loci = sort{$a cmp $b} keys(%locus);
+
+  return \@loci;
 }
 
 
@@ -174,7 +203,7 @@ sub mlstWorker{
 # Read the hits file from colorid and make a profiles file:
 # a file with one line per sample and one locus/allele per col
 sub profiles{
-  my($hits, $settings) = @_;
+  my($hits, $loci, $settings) = @_;
 
   my $profilesFile = "$$settings{tempdir}/profiles.tsv";
 
@@ -196,7 +225,7 @@ sub profiles{
   # Print to the profiles file
   open(my $outFh, ">", $profilesFile) or die "ERROR: could not write to $profilesFile: $!";
 
-  my @sortedLocus = sort{$a cmp $b} keys(%locusIndex);
+  my @sortedLocus = @$loci;
   my @sortedSample= sort{$a cmp $b} keys(%allele);
 
   print $outFh join("\t", "sample", @sortedLocus)."\n";
