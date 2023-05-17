@@ -20,7 +20,7 @@ exit(main());
 
 sub main{
   my $settings={};
-  GetOptions($settings,qw(help k=i numcpus=i tempdir=s)) or die $!;
+  GetOptions($settings,qw(help paired k=i numcpus=i tempdir=s)) or die $!;
   usage() if(@ARGV < 2 || $$settings{help});
 
   # Set some default variables
@@ -62,9 +62,16 @@ sub buildSamples{
 
   my $samplesTsv = "$$settings{tempdir}/samples.tsv";
 
+  my $increment=1;
+  if($$settings{paired}){
+    $increment=2;
+  }
+
   open(my $fh, ">", $samplesTsv) or die "ERROR: could not write to $samplesTsv: $!";
-  for my $s(@$seqs){
-    print $fh join("\t", $s, $s)."\n";
+  for(my $i=0; $i<@$seqs; $i+=$increment){
+    my $s = $$seqs[$i];
+    my @files = @$seqs[$i .. $i+$increment-1];
+    print $fh join("\t", $s, @files)."\n";
   }
   close $fh;
 
@@ -252,6 +259,9 @@ sub usage{
   -k          kmer length [default: 39]
   --tempdir   Alternative location for temporary directory
   --numcpus   Default: 1
+  --paired    Assume paired end reads for each sample.
+              This internally pairs R1 and R2 for each sample
+              for colorid's samples.tsv.
   --help      This useful help menu
   \n";
   exit 0;
