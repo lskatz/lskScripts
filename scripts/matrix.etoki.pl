@@ -23,10 +23,11 @@ exit(main());
 
 sub main{
   my $settings={};
-  GetOptions($settings,qw(help database=s)) or die $!;
+  GetOptions($settings,qw(help numcpus=i database=s)) or die $!;
   usage() if($$settings{help} || @ARGV < 1);
   $$settings{mem} ||= 0;
   $$settings{database} || die "ERROR: need --database";
+  $$settings{numcpus}  ||= 1;
 
   if($$settings{metric}){
     logmsg "WARNING: --metric is not configured in this script";
@@ -40,10 +41,28 @@ sub main{
 
   # Print each row of the matrix, one per assembly
   my @fasta = @ARGV;
-  for(my $i=0; $i<@fasta; $i++){
-    my $gappedMatrix = gappedMatrix($fasta[$i], $loci, $settings);
-    print $gappedMatrix . "\n";
+
+  # Start multithreading magic
+  my $Q = Thread::Queue->new(@fasta);
+
+  my @thr;
+  for(my $i=0;$i<$$settings{numcpus};$i++){
+    my @lociCopy = @$loci;
+    $thr[$i] = threads->new(\&gappedMatrixWorker, $Q, \@lociCopy, $settings);
   }
+  for(@thr){
+    $Q->enqueue(undef);
+  }
+
+  for(@thr){
+    my $gappedMatrixStr = $_->join;
+    print $gappedMatrixStr;
+  }
+
+  #for(my $i=0; $i<@fasta; $i++){
+  #  my $gappedMatrix = gappedMatrix($fasta[$i], $loci, $settings);
+  #  print $gappedMatrix . "\n";
+  #}
 
   return 0;
 }
@@ -64,6 +83,18 @@ sub lociFromDatabase{
   my @locus = sort{$a cmp $b} keys(%locus);
   return \@locus;
 }
+
+sub gappedMatrixWorker{
+  my($Q, $loci, $settings) = @_;
+
+  my $rows = "";
+  while(defined(my $fasta=$Q->dequeue)){
+    my $row = gappedMatrix($fasta, $loci, $settings);
+    $rows .= $row ."\n";
+  }
+  return $rows;
+}
+
 
 sub gappedMatrix{
   my($fasta, $loci, $settings) = @_;
@@ -171,7 +202,8 @@ sub usage{
   OPTIONS
   --database  The path to the etoki database whose format is CSV with
               three columns: md5sum, locus, allele [required]
-  --help    This useful help menu
+  --numcpus 1
+  --help      This useful help menu
 ";
   exit 0;
 }
