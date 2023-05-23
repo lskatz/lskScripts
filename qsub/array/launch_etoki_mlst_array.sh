@@ -26,7 +26,8 @@ if [ "$asm" == "" ]; then
   exit 0;
 fi;
 
-conda activate etoki || echo "could not activate etoki env"
+conda env list | grep etoki > /dev/null || \
+  echo "DIRE WARNING: 'etoki' virtual env not found"
 
 set -e
 set -u
@@ -41,7 +42,13 @@ mkdir -p $tmpdir/scratch
 echo "tmp dir is $tmpdir"
 
 CTRL_FILE="$tmpdir/array.txt"
-echo "$asm" | tr ' ' '\n' > $CTRL_FILE
+for i in $asm; do
+  if [ -e "$outdir/$(basename $i)" ]; then
+    continue;
+  fi
+  echo $i
+done > $CTRL_FILE
+
 echo "CTRL_FILE is $CTRL_FILE"
 
 if [ -d "$outdir" ]; then
@@ -51,15 +58,8 @@ if [ -d "$outdir" ]; then
 fi
 mkdir -pv $outdir
 
-#$ -S /bin/bash
-#$ -pe smp 1
-#$ -cwd -V
-#$ -o EToKi.log
-#$ -j y
-#$ -N EToKi
-
 qsub -N EToKi -o $tmpdir/log -j y -pe smp 1 -V -cwd -t 1-$(cat $CTRL_FILE | wc -l) \
-  -v "outdir=$outdir" -v "refs=$refs" -v "tmpdir=$tmpdir" -v "db=$db" -v "CTRL_FILE=$CTRL_FILE" <<- "END_OF_SCRIPT"
+  -v "outdir=$outdir" -v "refs=$refs" -v "db=$db" -v "CTRL_FILE=$CTRL_FILE" <<- "END_OF_SCRIPT"
   #!/bin/bash -l
 
   set -eu
@@ -69,15 +69,22 @@ qsub -N EToKi -o $tmpdir/log -j y -pe smp 1 -V -cwd -t 1-$(cat $CTRL_FILE | wc -
   EToKi.py configure || true
   echo
 
-  asm=$(sed -n ${SGE_TASK_ID}p $CTRL_FILE);
-  mkdir /scratch/$USER || true
+  tmpdir=$(mktemp --directory $(basename $0).TASK_ID$SGE_TASK_ID.XXXXXX --tmpdir=$TMPDIR)
+  trap ' { rm -rf $tmpdir; } ' EXIT
 
+  asm=$(sed -n ${SGE_TASK_ID}p $CTRL_FILE);
   samplename=$(basename $asm .fasta)
   b=$(basename $asm)
   echo "Sample name will be $samplename"
 
-  EToKi.py MLSType -i $asm -r $refs -k $samplename -d $db -o $tmpdir/scratch/$b
-  mv -v $tmpdir/scratch/$b $outdir/$b
+  # Speed this up by working on scratch
+  cp -v $asm  $tmpdir/asm.fasta
+  cp -v $db   $tmpdir/db.csv
+  cp -v $refs $tmpdir/refs.fasta
+
+  set -x
+  EToKi.py MLSType -i $tmpdir/asm.fasta -r $tmpdir/refs.fasta -k $samplename -d $tmpdir/db.csv -o $tmpdir/out.fasta
+  mv -v $tmpdir/out.fasta $outdir/$b
 
 END_OF_SCRIPT
 
