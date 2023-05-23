@@ -12,7 +12,7 @@
 outdir=$1
 refs=$2
 db=$3
-shift;shift;
+shift;shift;shift
 asm=$@
 
 #NSLOTS=${NSLOTS:=1}
