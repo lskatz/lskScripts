@@ -59,7 +59,7 @@ mkdir -pv $outdir
 #$ -N EToKi
 
 qsub -N EToKi -o $tmpdir/log -j y -pe smp 1 -V -cwd -t 1-$(cat $CTRL_FILE | wc -l) \
-  -v "outdir=$outdir" -v "refs=$refs" -v "db=$db" -v "CTRL_FILE=$CTRL_FILE" <<- "END_OF_SCRIPT"
+  -v "outdir=$outdir" -v "refs=$refs" -v "tmpdir=$tmpdir" -v "db=$db" -v "CTRL_FILE=$CTRL_FILE" <<- "END_OF_SCRIPT"
   #!/bin/bash -l
 
   set -eu
