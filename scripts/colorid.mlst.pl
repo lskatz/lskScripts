@@ -71,6 +71,7 @@ sub buildSamples{
   for(my $i=0; $i<@$seqs; $i+=$increment){
     my $s = $$seqs[$i];
     my @files = @$seqs[$i .. $i+$increment-1];
+    logmsg join("\t", $s, @files);
     print $fh join("\t", $s, @files)."\n";
   }
   close $fh;

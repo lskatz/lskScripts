@@ -26,9 +26,6 @@ if [ "$asm" == "" ]; then
   exit 0;
 fi;
 
-conda env list | grep etoki > /dev/null || \
-  echo "DIRE WARNING: 'etoki' virtual env not found"
-
 set -e
 set -u
 
