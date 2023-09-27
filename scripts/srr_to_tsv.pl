@@ -113,28 +113,32 @@ sub convertSrr{
   # Create the edirect XML files into the temp dir.
   # First into .xml.tmp files and then into .xml files
   # to help with checking whether the files exist and are intact.
-  my @esearchStat = stat("$tempdir/esearch.xml");
-  my @biosampleStat = stat("$tempdir/biosample.xml");
+  my @esearchStat = stat("$tempdir/esearch.xml.gz");
+  my @biosampleStat = stat("$tempdir/biosample.xml.gz");
   #print Dumper \@biosampleStat, $biosampleStat[7];
-  if(!-e "$tempdir/esearch.xml" || $esearchStat[7] < 100){
-    system("esearch -db sra -query '$srr' > $tempdir/esearch.xml.tmp");
+  if(!-e "$tempdir/esearch.xml.gz" || $esearchStat[7] < 100){
+    system("esearch -db sra -query '$srr' | gzip -c > $tempdir/esearch.xml.gz.tmp");
     die if $?;
-    mv("$tempdir/esearch.xml.tmp", "$tempdir/esearch.xml");
+    # TODO show a warning if "count" is zero in the xml
+    mv("$tempdir/esearch.xml.gz.tmp", "$tempdir/esearch.xml.gz");
   }
-  if(!-e "$tempdir/biosample.xml" || $biosampleStat[7] < 100){
-    system("cat $tempdir/esearch.xml | elink -target biosample | efetch -format xml | xtract -format > $tempdir/biosample.xml.tmp");
+  if(!-e "$tempdir/biosample.xml.gz" || $biosampleStat[7] < 100){
+    system("zcat $tempdir/esearch.xml.gz | elink -target biosample | efetch -format xml | xtract -format | gzip -c > $tempdir/biosample.xml.gz.tmp");
     die if $?;
-    mv("$tempdir/biosample.xml.tmp", "$tempdir/biosample.xml");
+    mv("$tempdir/biosample.xml.gz.tmp", "$tempdir/biosample.xml.gz");
   }
 
-  $info{biosample}   = qx(cat $tempdir/biosample.xml | xtract -pattern BioSample -element BioSample\@accession);
+  $info{biosample}   = qx(zcat $tempdir/biosample.xml.gz | xtract -pattern BioSample -element BioSample\@accession);
   chomp($info{biosample});
+  if(!$info{biosample}){
+    $info{biosample} = "MISSING";
+  }
 
-  $info{strain} = qx(cat $tempdir/biosample.xml | grep -Ev 'is_primary|SRA' | xtract -pattern BioSample -block Ids -if Id\@db_label -equals "Sample name" -element Id);
+  $info{strain} = qx(zcat $tempdir/biosample.xml.gz | grep -Ev 'is_primary|SRA' | xtract -pattern BioSample -block Ids -if Id\@db_label -equals "Sample name" -element Id);
   # If we don't have the strain name then it might be in a different label like Id@db=CFSAN.
   # If so, check for whatever ID is there.
   if(!$info{strain}){
-    $info{strain} = qx(cat $tempdir/biosample.xml | grep -Ev 'is_primary|SRA' | xtract -pattern BioSample -block Ids -element Id);
+    $info{strain} = qx(zcat $tempdir/biosample.xml.gz | grep -Ev 'is_primary|SRA' | xtract -pattern BioSample -block Ids -element Id);
     # If there is still no ID, label as MISSING.
     if(!$info{strain}){
       $info{strain} = "MISSING";
