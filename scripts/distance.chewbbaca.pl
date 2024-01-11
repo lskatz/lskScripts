@@ -60,12 +60,20 @@ sub main{
   logmsg "$numComparisons comparisons set up.";
 
   # Start off printing the table
-  print join("\t", qw(sample1 sample2 identity numSame numCompared))."\n";
+  print join("\t", qw(sample1 sample2 identity numSame numCompared sample1loci sample2loci))."\n";
   my $i=0;
   for my $c(@comparison){
     # Get the distances for this comparison
     my $dist = allelicDistance($allele{$$c[0]}, $allele{$$c[1]}, $settings);
-    print join("\t", $$c[0], $$c[1], $$dist{identity}, $$dist{numSame}, $$dist{numCompared});
+    my $numLoci1 = 0;
+    while(my($locus,$allele) = each(%{ $allele{$$c[0]} })){
+      $numLoci1++ if($allele ne -1);
+    }
+    my $numLoci2 = 0;
+    while(my($locus,$allele) = each(%{ $allele{$$c[0]} })){
+      $numLoci2++ if($allele ne -1);
+    }
+    print join("\t", $$c[0], $$c[1], $$dist{identity}, $$dist{numSame}, $$dist{numCompared}, $numLoci1, $numLoci2);
     print "\n";
 
     if(++$i % 10000 == 0){
