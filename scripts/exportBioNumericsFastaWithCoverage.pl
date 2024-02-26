@@ -12,7 +12,9 @@ use Getopt::Long;
 use File::Basename qw/basename/;
 
 local $0 = basename($0);
-sub logmsg{ print STDERR $0 "@_\n"; }
+
+sub logmsg{ print STDERR "$0: @_\n"; }
+
 exit main();
 
 sub main{
@@ -69,7 +71,6 @@ sub printFasta{
       $out->write_seq($subseq);
     }
     $out->close;
-    logmsg "Wrote $outfile";
   }
 }
 
