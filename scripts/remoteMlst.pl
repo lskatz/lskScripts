@@ -6,6 +6,7 @@ use Cwd qw/abs_path/;
 use Data::Dumper;
 use Getopt::Long;
 use File::Basename qw/basename dirname/;
+use File::Copy qw/mv/;
 use File::Path qw/rmtree/;
 use File::Temp qw/tempdir/;
 use File::Which qw/which/;
@@ -19,13 +20,15 @@ exit(main());
 
 sub main{
   my $settings={};
-  GetOptions($settings,qw(tempdir=s scheme=s numcpus=i help)) or die $!;
+  GetOptions($settings,qw(tempdir=s outdir=s scheme=s numcpus=i help)) or die $!;
   $$settings{numcpus} ||= 1;
   $$settings{tempdir} ||= tempdir("remoteMlst.XXXXXX", TMPDIR=>1, CLEANUP=>1);
   usage() if($$settings{help} || !@ARGV);
 
   # Required options
-  $$settings{scheme} or die "ERROR: need --scheme";
+  my $scheme = $$settings{scheme} or die "ERROR: need --scheme";
+  my $outdir = $$settings{outdir} or die "ERROR: need --outdir";
+  mkdir($outdir);
 
   # Check for necessary executables
   for my $exe(qw(fasterq-dump mlst stringMLST.py)){
@@ -40,27 +43,19 @@ sub main{
     die "ERROR: could not find the mlst database in the mlst help output";
   }
 
-  my $formattedDb = formatDb($mlstdb, $$settings{scheme}, $settings);
+  my $formattedDb = formatDb($mlstdb, $scheme, $outdir, $settings);
 
+  # Main loop
   for my $sra_run(@ARGV){
+    my $outfile = "$outdir/$sra_run.mlst.tsv";
+    logmsg "Running MLST on $sra_run and saving to $outfile";
+    if(-e $outfile){
+      logmsg "Skipping $sra_run because $outfile already exists";
+      next;
+    }
+    logmsg "Downloading $sra_run";
     my $dir = downloadSra($sra_run,$settings);
-    my $mlst = runMlst($dir, $formattedDb, $settings);
-    
-    # Parse $mlst for the sequence type
-    open(my $fh, "<", $mlst) or die "ERROR: could not read $mlst: $!";
-    my $header = <$fh>;
-    chomp($header);
-    my @header = split(/\t/, $header);
-    my $values = <$fh>;
-    chomp($values);
-    my %mlst;
-    @mlst{@header} = split(/\t/, $values);
-    my $ST = $mlst{ST} || "-1"; # use -1 as a default if ST is not found
-    print "$sra_run\t$ST\n";
-
-    # Even though $dir will be removed at the end of the script,
-    # part of the reason for this script is to save on disk space,
-    # and so we will remove it when done.
+    runMlst($dir, $outfile, $formattedDb, $settings);
     rmtree($dir);
   }
 
@@ -68,8 +63,13 @@ sub main{
 }
 
 sub formatDb{
-  my($mlstdb, $scheme, $settings) = @_;
-  my $formattedDb = "$$settings{tempdir}/db";
+  my($mlstdb, $scheme, $outdir, $settings) = @_;
+  my $formattedDb = "$outdir/stringMLST.$scheme.db";
+  if(-e "$formattedDb/_35.txt"){
+    logmsg "Will not recreate database $formattedDb because it already exists";
+    return $formattedDb;
+  }
+
   mkdir($formattedDb);
 
   my $indir = abs_path(dirname($mlstdb) . "/../pubmlst/$scheme");
@@ -97,10 +97,18 @@ sub formatDb{
 
   #system("cat $config");
 
-  system($$settings{'stringMLST.py'}. " --buildDB --config $config -k 35 -P '$formattedDb/' | sed 's/^/[stringMLST.py]/' >&2");
+  system($$settings{'stringMLST.py'}. " --buildDB --config $config -k 35 -P '$formattedDb/' | sed 's/^/[stringMLST.py] /' >&2");
   die "ERROR running stringMLST.py --buildDB" if $?;
 
   # => produces files _35.txt _profile.txt _weight.txt
+
+  # Make this directory read-only to help make it thread safe
+  for my $file(glob("$formattedDb/*")){
+    # read-only
+    chmod(0644, $file);
+  }
+  ## read-execute on the directory itself
+  #chmod(0755, $formattedDb);
 
   return $formattedDb;
 }
@@ -109,7 +117,7 @@ sub downloadSra{
   my($acc, $settings) = @_;
   my $tempdir = $$settings{tempdir} . "/$acc";
   mkdir $tempdir;
-  system($$settings{'fasterq-dump'}." $acc --threads $$settings{numcpus} --outdir $tempdir --split-files --skip-technical | sed 's/^/[fasterq-dump]/' >&2");
+  system($$settings{'fasterq-dump'}." $acc --threads $$settings{numcpus} --outdir $tempdir --split-files --skip-technical | sed 's/^/[fasterq-dump] /' >&2");
   die "ERROR with fasterq-dump" if $?;
   system("gzip -1v $tempdir/*.fastq 1>&2");
   die "ERROR with gzip" if $?;
@@ -118,10 +126,16 @@ sub downloadSra{
 }
 
 sub runMlst{
-  my($indir, $db, $settings) = @_;
-  my $out = $$settings{tempdir}."/mlst.out";
-  my @fastq = glob("$indir/*.fastq.gz");
+  my($indir, $out, $db, $settings) = @_;
+  my $tmpout = $$settings{tempdir}."/mlst.out";
+  my @fastq  = glob("$indir/*.fastq.gz");
+  my $sample = basename($fastq[0], qw(_1.fastq.gz));
+  if(-e $out){
+    logmsg "Skipping $out because it already exists";
+    return $out;
+  }
 
+  # If we have only one fastq file, then I'll need to rethink this.
   if(@fastq == 1){
     logmsg "Detected only one fastq file";
     ...;
@@ -130,11 +144,13 @@ sub runMlst{
     die "ERROR: expected 2 fastq files but found ".scalar(@fastq);
   }
 
-  system($$settings{'stringMLST.py'} . " --predict -1 $fastq[0] -2 $fastq[1] --paired -P $db/ -k 35 -o $out | sed 's/^/[stringMLST.py]/' >&2");
+  system($$settings{'stringMLST.py'} . " --predict -1 $fastq[0] -2 $fastq[1] --paired -P $db/ -k 35 -o $tmpout | sed 's/^/[stringMLST.py] /' >&2");
   
   # => produces, e.g.,
   # Sample  dnaE    dtdS    gyrB    pntA    pyrC    recA    tnaA    ST
   # SRR19910447     3       4       4       29      4       19      22      3
+
+  mv($tmpout, $out) or die "ERROR: could not move results to $out: $!";
 
   return $out;
 }
@@ -144,6 +160,7 @@ sub usage{
   Usage: $0 [options] acc1 acc2 acc3 ...
   --scheme  The MLST scheme to use.
             Run 'mlst --list' to see available schemes.
+  --outdir  Output directory
   --numcpus Number of CPUs to use. Default: 1
   --help    This useful help menu
   \n";
