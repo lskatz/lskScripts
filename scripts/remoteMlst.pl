@@ -29,6 +29,7 @@ sub main{
   my $scheme = $$settings{scheme} or die "ERROR: need --scheme";
   my $outdir = $$settings{outdir} or die "ERROR: need --outdir";
   mkdir($outdir);
+  mkdir("$outdir/raw");
 
   # Check for necessary executables
   for my $exe(qw(fasterq-dump mlst stringMLST.py)){
@@ -47,7 +48,7 @@ sub main{
 
   # Main loop
   for my $sra_run(@ARGV){
-    my $outfile = "$outdir/$sra_run.mlst.tsv";
+    my $outfile = "$outdir/raw/$sra_run.mlst.tsv";
     logmsg "Running MLST on $sra_run and saving to $outfile";
     if(-e $outfile){
       logmsg "Skipping $sra_run because $outfile already exists";
@@ -137,14 +138,15 @@ sub runMlst{
 
   # If we have only one fastq file, then I'll need to rethink this.
   if(@fastq == 1){
-    logmsg "Detected only one fastq file";
-    ...;
+      system($$settings{'stringMLST.py'} . " --predict -1 $fastq[0] -s -P $db/ -k 35 -o $tmpout | sed 's/^/[stringMLST.py] /' >&2");
   }
-  if(@fastq != 2){
-    die "ERROR: expected 2 fastq files but found ".scalar(@fastq);
+  if(@fastq > 2){
+    logmsg "ERROR: expected 2 fastq files but found ".scalar(@fastq);
+    return "";
   }
-
-  system($$settings{'stringMLST.py'} . " --predict -1 $fastq[0] -2 $fastq[1] --paired -P $db/ -k 35 -o $tmpout | sed 's/^/[stringMLST.py] /' >&2");
+  if(@fastq == 2){
+    system($$settings{'stringMLST.py'} . " --predict -1 $fastq[0] -2 $fastq[1] --paired -P $db/ -k 35 -o $tmpout | sed 's/^/[stringMLST.py] /' >&2");
+  }
   
   # => produces, e.g.,
   # Sample  dnaE    dtdS    gyrB    pntA    pyrC    recA    tnaA    ST
