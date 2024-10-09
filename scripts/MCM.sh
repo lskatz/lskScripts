@@ -14,7 +14,6 @@ echo "JAR: $jar"
 
 if [ "$output" = "" ]; then
   echo "Usage: $0 ref.fasta draft.fasta outputDir";
-  echo "NOTE: this script must be in the same directory as Mauve.jar"
   exit 1;
 fi
 
