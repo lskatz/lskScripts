@@ -31,9 +31,7 @@ echo "$READS" | tr ' ' '\n'  > $CTRL_FILE
 echo "CTRL_FILE is $CTRL_FILE"
 
 module purge
-module load Skesa/2.0_2
-#module unload gcc
-#module load gcc/4.9.3
+module load Skesa
 skesa --version
 
 qsub -q all.q -N skesa -o $TMP/log -j y -pe smp 1 -V -cwd -t 1-$(cat $CTRL_FILE | wc -l) \
@@ -41,10 +39,7 @@ qsub -q all.q -N skesa -o $TMP/log -j y -pe smp 1 -V -cwd -t 1-$(cat $CTRL_FILE 
   #!/bin/bash -l
   set -e
 
-  # LD_LIBRARY_PATH is stripped by qsub and needs to be readded
-  # The following is how it appeared in my own environment.
-  export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/apps/x86_64/gcc/5.4/lib64:/apps/x86_64/gmp/6.1.0/lib:/apps/x86_64/mpfr/3.1.3/lib:/apps/x86_64/mpc/1.0.3/lib:/apps/x86_64/isl/0.18/lib
-  echo "WARNING: setting LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
+  module load Skesa
 
   module list
   skesa --version

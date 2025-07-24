@@ -27,14 +27,12 @@ if [ -e "$R1" ]; then
   exit 1
 fi
 
-module purge
-#module load sratoolkit/2.9.1
-module load sratoolkit/2.11.3
-
 # Check if fasten_sort is in the path and if not, quit
 echo "Checking dependency paths"
 which fasten_sort
 which fasterq-dump || which fastq-dump
+which gzip
+#which esearch efetch
 
 tempdir=$(mktemp --directory --tmpdir=$TMPDIR $(basename $0).XXXXXX)
 trap "{ rm -rf $tempdir; }" EXIT SIGINT SIGTERM
@@ -48,9 +46,11 @@ if [ "$fasterqDump" == "" ]; then
     echo "ERROR with fastq-dump and $SRR"
     exit 1
   fi
+  set +x
 else
   cd $tempdir
-  fasterq-dump $SRR --print-read-nr --threads 1 --outdir $tempdir --split-files --skip-technical 
+  #fasterq-dump $SRR --print-read-nr --threads 1 --outdir $tempdir --split-files --skip-technical 
+  fasterq-dump $SRR --threads 1 --outdir $tempdir --split-files --skip-technical 
   if [ $? -gt 0 ]; then 
     echo "ERROR with fasterq-dump and $SRR"
     exit 1
@@ -60,6 +60,7 @@ else
     ls -lhA $tempdir
     exit 1;
   fi
+  set +x
   cd -
 
   # Compress fastq files
@@ -76,19 +77,27 @@ else
 fi
 
 # Intense compression
-#echo "DEBUG"; head -n 888 $tempdir/$R1uncompressed > $tempdir/unsorted_1.fastq
-#echo "DEBUG"; head -n 888 $tempdir/$R2uncompressed > $tempdir/unsorted_2.fastq
 mv -v $tempdir/$R1uncompressed $tempdir/unsorted_1.fastq
 mv -v $tempdir/$R2uncompressed $tempdir/unsorted_2.fastq
 cat $tempdir/unsorted_1.fastq $tempdir/unsorted_2.fastq | \
   fasten_shuffle | \
   fasten_sort --sort-by SEQ --paired-end | \
-  fasten_progress --print --id sort-reads --update-every 100000 | \
+  fasten_progress --print --id "sort-reads_$tempdir" --update-every 100000 | \
   fasten_shuffle -d -1 $tempdir/$R1uncompressed -2 $tempdir/$R2uncompressed
-gzip -v9 $tempdir/$R1uncompressed $tempdir/$R2uncompressed
-rm -v $tempdir/unsorted_1.fastq $tempdir/unsorted_2.fastq
+
+for i in $tempdir/$R1uncompressed $tempdir/$R2uncompressed; do
+  if [ -e $i ]; then
+    gzip -3 -v $i
+  fi
+done
+rm -vf $tempdir/unsorted_1.fastq $tempdir/unsorted_2.fastq
 
 ls -lhd $tempdir
 ls -lh $tempdir/*
-mv -v $tempdir/{$R1,$R2} .
+for i in $tempdir/{$R1,$R2}; do
+  if [ -e $i ]; then
+    mv -v $i .
+  fi
+done
+
 

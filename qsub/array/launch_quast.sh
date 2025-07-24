@@ -13,6 +13,7 @@ set -u
 # get the output directory and then remove from argv
 outdir=$1
 shift
+mkdir -pv $outdir
 
 # Make temp folder that can hold log files and temporary files
 TMP=$(mktemp --tmpdir='.' --directory quast.XXXXXXXX)
@@ -22,6 +23,9 @@ echo "tmp dir is $TMP "
 CTRL_FILE="$TMP/array.txt"
 echo $@ | tr ' ' '\n' | grep . > $CTRL_FILE
 
+# get a unique identifier for all jobs in this script
+job_id="quast_$(uuidgen | cut -c1-8)"
+
 # Start off the job array
 # -N is the job name
 # -o $TMP -j y puts all log files into the temporary directory
@@ -29,7 +33,7 @@ echo $@ | tr ' ' '\n' | grep . > $CTRL_FILE
 # -t indicates an array, but it needs a min to max in the next parameter
 #     1-$(cat $CTRL_FILE | wc -l) translates to "1 to the number of gzip files"
 # -v "CTRL_FILE=$CTRL_FILE" creates a variable to use inside of the here document.
-qsub -pe smp 1 -N quast -o $TMP/log -j y -V -cwd -t 1-$(cat $CTRL_FILE | wc -l) \
+qsub -pe smp 1 -N $job_id -o $TMP/log -j y -V -cwd -t 1-$(cat $CTRL_FILE | wc -l) \
   -v "CTRL_FILE=$CTRL_FILE" -v "outdir=$outdir" <<- "END_OF_SCRIPT"
     # This is a "here document."  It gets submitted as though it were a 
     # separate file. The here document ends right before END_OF_SCRIPT
@@ -47,9 +51,17 @@ qsub -pe smp 1 -N quast -o $TMP/log -j y -V -cwd -t 1-$(cat $CTRL_FILE | wc -l) 
     uncompressed=$TMP/$(basename $file .gz)
     cp -v $file $tmpIn
 
-    quast.py --threads 1 --output-dir $TMP/quast_out \
-      --no-plots --no-html --no-html --no-icarus 
+    quast.py $tmpIn --threads 1 --output-dir $TMP/quast_out \
+      --no-plots --no-html --no-html --no-icarus # --conserved-genes-finding
 
-    mv -v $TMP/ $outdir/$(basename $file .fasta)_quast_out
+    # move the output to the outdir
+    mkdir -pv $outdir/$(basename $file .fasta)_quast_out
+    mv -v $TMP/quast_out/* $outdir/$(basename $file .fasta)_quast_out
 END_OF_SCRIPT
 
+qsub -hold_jid $job_id -N "${job_id}_multiqc" -o $TMP/log -j y -V -cwd \
+  -v "outdir=$outdir" <<- "END_OF_SCRIPT"
+    set -e
+    module load multiqc
+    multiqc -f -o $outdir $outdir/*_quast_out
+END_OF_SCRIPT

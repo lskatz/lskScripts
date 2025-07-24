@@ -27,7 +27,7 @@ fi
 
 module purge
 #module load sratoolkit/2.9.1
-module load sratoolkit/2.11.3
+#module load sratoolkit/2.11.3
 
 # Check if fasten_sort is in the path and if not, quit
 echo "Checking dependency paths"
@@ -48,7 +48,7 @@ if [ "$fasterqDump" == "" ]; then
   fi
 else
   cd $tempdir
-  fasterq-dump $SRR --print-read-nr --threads 1 --outdir $tempdir --split-files --skip-technical 
+  fasterq-dump $SRR --threads 1 --outdir $tempdir --split-files --skip-technical 
   if [ $? -gt 0 ]; then 
     echo "ERROR with fasterq-dump and $SRR"
     exit 1

@@ -1,7 +1,7 @@
 #!/usr/bin/env perl 
 
 use warnings;
-use strict;a
+use strict;
 use Data::Dumper;
 use Getopt::Long;
 use File::Basename qw/basename/;
@@ -10,6 +10,8 @@ use POSIX qw/ceil/;
 
 use version 0.77;
 our $VERSION = '0.2.0';
+
+print "HELLO WORLD\n";
 
 local $0 = basename $0;
 sub logmsg{local $0=basename $0; print STDERR "$0: @_\n";}
@@ -49,10 +51,6 @@ sub normalize{
 
   # Read the input fastq
   my $numEntries = @$entries;
-  #my %entries;
-  #for my $e(@$entries){
-  #  $entries{$e} = 1;
-  #}
 
   for(my $i=0; $i<$numEntries; $i++){
     my $entry = $$entries[$i];
@@ -77,12 +75,6 @@ sub normalize{
     # Save the kmers for the sequence.
     $seqs{$entry} = \@kmers_in_seq;
   }
-  undef($entries);
-
-  #if($iteration > 10){
-  #  print Dumper $kmers{ATTTACAACAT};
-  #  die;
-  #}
 
   # Sort kmers by count,
   # then by alphabetical to keep it stable sort.
@@ -91,18 +83,18 @@ sub normalize{
       || $b cmp $a
     } keys(%kmers);
 
-  my @totalCoverage;
-  for my $kmer(@sortedKmer){
-    push(@totalCoverage, $kmers{$kmer}{count});
-  }
-  logmsg "Average coverage ".(sum(@totalCoverage)/@totalCoverage);
-  logmsg "Kmers with most coverage";
-  for(my $j=0;$j<5;$j++){
-    logmsg "  $sortedKmer[$j] ".$kmers{$sortedKmer[$j]}{count};
-  }
-  for(my $j=-5;$j<0;$j++){
-    logmsg "  $sortedKmer[$j] ".$kmers{$sortedKmer[$j]}{count};
-  }
+  #my @totalCoverage;
+  #for my $kmer(@sortedKmer){
+  #  push(@totalCoverage, $kmers{$kmer}{count});
+  #}
+  #logmsg "Average coverage ".(sum(@totalCoverage)/@totalCoverage);
+  #logmsg "Kmers with most coverage";
+  #for(my $j=0;$j<5;$j++){
+  #  logmsg "  $sortedKmer[$j] ".$kmers{$sortedKmer[$j]}{count};
+  #}
+  #for(my $j=-5;$j<0;$j++){
+  #  logmsg "  $sortedKmer[$j] ".$kmers{$sortedKmer[$j]}{count};
+  #}
 
   # which entries to keep after normalizing
   my @keepEntries = ();
@@ -126,15 +118,13 @@ sub normalize{
       }
 
       # Remove this from the kmer hash now that it has been used
-      for my $kmer(@{ $seqs{$shuffled[$i]} }){
+      my $numKmersForThisSeq = @{ $seqs{$shuffled[$i]} };
+      for(my $l=0;$l<$numKmersForThisSeq;$l++){
+        my $kmer = $seqs{$shuffled[$i]}[$l];
         delete($kmers{$kmer}{entries}{$shuffled[$i]});
       }
-      #delete($entries{$shuffled[$i]});
     }
   }
-
-  # Add back on whatever is left that wasn't downsampled
-  #push(@keepEntries, keys(%entries));
 
   return [shuffle @keepEntries];
 }
@@ -143,8 +133,8 @@ sub normalize{
 sub readFastq{
   my($pairedEnd, $settings) = @_;
 
-  my $fh = \*STDIN;
-  #logmsg "DEBUG: different input file"; open(my $fh,"zcat tests/unittests/input/SRR27366697.10x.fastq.gz | ") or die "ERROR: could not open test file: $!";
+  #my $fh = \*STDIN;
+  logmsg "DEBUG: different input file"; open(my $fh,"zcat tests/unittests/input/SRR27366697.10x.fastq.gz | ") or die "ERROR: could not open test file: $!";
 
   my @entries;
   while(my $id = <$fh>){
